@@ -48,9 +48,9 @@ class mines:
 				self.x = self.x - 1
 			elif (key == 'KEY_RIGHT' or key == 'l') and self.x < width - 1:		
 				self.x = self.x + 1
-			elif (key == 'KEY_UP' or key == 'j') and self.y > 0:
+			elif (key == 'KEY_UP' or key == 'k') and self.y > 0:
 				self.y = self.y - 1
-			elif (key == 'KEY_DOWN' or key == 'k') and self.y < height - 1:
+			elif (key == 'KEY_DOWN' or key == 'j') and self.y < height - 1:
 				self.y = self.y + 1
 			elif (key == 'a'):
 				result = self.board[self.y][self.x].trigger()
