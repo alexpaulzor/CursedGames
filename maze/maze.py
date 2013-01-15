@@ -10,7 +10,7 @@ class Maze:
         self.width = width
         self.height = height
         self.newboard(width, height)
-        #curses.wrapper(self.newgame)
+        curses.wrapper(self.newgame)
 
 
     def newgame(self, stdscr):
@@ -31,9 +31,11 @@ class Maze:
                 if square.down_wall and square.right_wall:
                     self.stdscr.addstr(y, x * 2, "_|")
                 elif square.right_wall:
-                    self.stdscr.addstr(y, x * 2 + 1, "|")
+                    self.stdscr.addstr(y, x * 2, " |")
                 elif square.down_wall:
-                    self.stdscr.addstr(y, x * 1, "__")
+                    self.stdscr.addstr(y, x * 2, "__")
+                else:
+                    self.stdscr.addstr(y, x * 2, "  ")
     
     def outputboard(self):
         print
@@ -56,6 +58,8 @@ class Maze:
                     line += " |"
                 elif square.down_wall:
                     line += "__"
+                else:
+                    line += "  "
             print line
         print
 
@@ -84,6 +88,7 @@ class Maze:
 
 
         self.explore_neighbors(self.enter_square)
+        #self.explore_neighbors(self.exit_square)
 
     def explore_neighbors(self, square):
         """
@@ -105,8 +110,6 @@ class Maze:
         
         rand = random.Random()
         rand.shuffle(nbrs)
-        
-        self.outputboard()
 
         for nbr in nbrs:
             if not nbr.visited:
@@ -167,4 +170,4 @@ class Square:
 
 
 if __name__ == "__main__":
-    m = Maze(5, 5)
+    m = Maze(40, 40)
