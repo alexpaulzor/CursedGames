@@ -11,31 +11,124 @@ class Maze:
         self.height = height
         self.newboard(width, height)
         curses.wrapper(self.newgame)
+        print self.retval
+
+    def visit_neighbors(self, square):
+        square.visible = True
+        if square.x > 0:
+            left_neighbor = self.board[square.y][square.x - 1]
+            if not left_neighbor.right_wall:
+                left_neighbor.visible = True
+        if square.y > 0:
+            top_neighbor = self.board[square.y - 1][square.x]
+            if not top_neighbor.down_wall:
+                top_neighbor.visible = True
+        if not square.right_wall and square.x < len(self.board[0]) - 1:
+            right_neighbor = self.board[square.y][square.x + 1]
+            right_neighbor.visible = True
+        if not square.down_wall and square.y < len(self.board) - 1:
+            down_neighbor = self.board[square.y + 1][square.x]
+            down_neighbor.visible = True
+
 
 
     def newgame(self, stdscr):
-        
+        self.current_square = self.enter_square
+        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_RED, curses.COLOR_RED)
         self.stdscr = stdscr
         self.stdscr.clear()
         self.printboard()
         self.stdscr.refresh()
         key = None
-        while key != 'q':
+        while (key != 'q'):
             key = self.stdscr.getkey()
+            if (key == 'KEY_LEFT' or key == 'h') and self.current_square.x > 0:
+                neighbor = self.board[self.current_square.y][self.current_square.x - 1]
+                if not neighbor.right_wall:
+                    self.current_square = neighbor
+                    self.visit_neighbors(self.current_square)
+            elif (key == 'KEY_RIGHT' or key == 'l') and not self.current_square.right_wall and self.current_square.x < len(self.board[0]) - 1:
+                neighbor = self.board[self.current_square.y][self.current_square.x + 1]
+                self.current_square = neighbor
+                self.visit_neighbors(self.current_square)
+            elif (key == 'KEY_UP' or key == 'k') and self.current_square.y > 0:
+                neighbor = self.board[self.current_square.y - 1][self.current_square.x]
+                if not neighbor.down_wall:
+                    self.current_square = neighbor
+                    self.visit_neighbors(self.current_square)
+            elif (key == 'KEY_DOWN' or key == 'j') and not self.current_square.down_wall and self.current_square.y < len(self.board) - 1:
+                neighbor = self.board[self.current_square.y + 1][self.current_square.x]
+                self.current_square = neighbor
+                self.visit_neighbors(self.current_square)
+            if self.haswon():
+                self.retval = "You win!"
+                return
+            self.printboard()
+            self.stdscr.refresh()
+        self.retval = "Goodbye"
+
+    def haswon(self):
+        return self.current_square == self.exit_square
 
 
     def printboard(self):
+        """There are a few cases here:
+            * I am visible
+            ** Show my walls
+            * I am not visible
+            ** Neither of my right or down neighbors are visible
+            *** Show "##"
+            ** Both my right and down neighbors are visible
+            *** Show my walls
+
+
+        """
         for y in self.board:
             for x in self.board[y]:
                 square = self.board[y][x]
-                if square.down_wall and square.right_wall:
-                    self.stdscr.addstr(y, x * 2, "_|")
-                elif square.right_wall:
-                    self.stdscr.addstr(y, x * 2, " |")
-                elif square.down_wall:
-                    self.stdscr.addstr(y, x * 2, "__")
+                color = 1
+                if square == self.current_square:
+                    color = 2
+                show_right = False
+                show_down = False
+                if square.visible:
+                    show_right = True
+                    show_down = True
                 else:
-                    self.stdscr.addstr(y, x * 2, "  ")
+                    if x < len(self.board[0]) - 1:
+                        right_neighbor = self.board[y][x + 1]
+                        if right_neighbor.visible:
+                            show_right = True
+                    if y < len(self.board) - 1:
+                        down_neighbor = self.board[y + 1][x]
+                        if down_neighbor.visible:
+                            show_down = True
+                strtext = "##"
+                if not show_right and not show_down:
+                    strtext = "##"
+                elif show_right and not show_down:
+                    if square.right_wall:
+                        strtext = "#|"
+                    else:
+                        # should not happen
+                        strtext = "# "
+                elif show_down and not show_right:
+                    if square.down_wall:
+                        strtext = "_#"
+                    else:
+                        # should not happen
+                        strtext = " #"
+                elif square.down_wall and square.right_wall:
+                    strtext = "_|"
+                elif square.right_wall:
+                    strtext = " |"
+                elif square.down_wall:
+                    strtext = "__"
+                else:
+                    strtext = "  "
+                self.stdscr.addstr(y, x * 2, strtext[0], curses.color_pair(color))
+                self.stdscr.addstr(y, x * 2 + 1, strtext[1], curses.color_pair(color))
     
     def outputboard(self):
         print
@@ -84,11 +177,10 @@ class Maze:
         else:
             self.exit_square = self.board[rand.randint(0, height - 1)][width - 1]
             self.exit_square.right_wall = False
-        #self.exit_square.visited = False
-
-
         self.explore_neighbors(self.enter_square)
-        #self.explore_neighbors(self.exit_square)
+        
+        self.current_square = self.enter_square
+        self.current_square.visited = True
 
     def explore_neighbors(self, square):
         """
@@ -138,7 +230,7 @@ class Square:
         self.visited = False
 
     def destroy_wall(self, other):
-        print "Destroying wall %s, %s" % (self, other)
+        #print "Destroying wall %s, %s" % (self, other)
         if other.x == self.x:
             if other.y == self.y - 1:
                 other.down_wall = False
@@ -149,7 +241,7 @@ class Square:
                 other.right_wall = False
             elif other.x == self.x + 1:
                 self.right_wall = False
-        print "Destroyed wall %s, %s" % (self, other)
+        #print "Destroyed wall %s, %s" % (self, other)
 
     def __str__(self):
         if self.down_wall:
