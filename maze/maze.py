@@ -35,7 +35,8 @@ class Maze:
     def newgame(self, stdscr):
         self.current_square = self.enter_square
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
-        curses.init_pair(2, curses.COLOR_RED, curses.COLOR_RED)
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_RED)
+        curses.init_pair(3, curses.COLOR_WHITE, curses.COLOR_BLUE)
         self.stdscr = stdscr
         self.stdscr.clear()
         self.printboard()
@@ -90,6 +91,8 @@ class Maze:
                 color = 1
                 if square == self.current_square:
                     color = 2
+                elif square == self.exit_square:
+                    color = 3
                 show_right = False
                 show_down = False
                 if square.visible:
