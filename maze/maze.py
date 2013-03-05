@@ -4,6 +4,8 @@ import curses
 import random
 
 class Maze:
+    STRAIGHT_BIAS = 0.3
+
     board = {}
 
     def __init__(self, width, height):
@@ -39,7 +41,8 @@ class Maze:
         curses.init_pair(3, curses.COLOR_WHITE, curses.COLOR_BLUE)
         self.stdscr = stdscr
         self.stdscr.clear()
-        self.printboard()
+        self.printwholeboard()
+        #self.printboard()
         self.stdscr.refresh()
         key = None
         while (key != 'q'):
@@ -133,6 +136,26 @@ class Maze:
                 self.stdscr.addstr(y, x * 2, strtext[0], curses.color_pair(color))
                 self.stdscr.addstr(y, x * 2 + 1, strtext[1], curses.color_pair(color))
     
+    def printwholeboard(self):
+        for y in self.board:
+            for x in self.board[y]:
+                square = self.board[y][x]
+                color = 1
+                if square == self.current_square:
+                    color = 2
+                elif square == self.exit_square:
+                    color = 3
+                if square.down_wall and square.right_wall:
+                    strtext = "_|"
+                elif square.right_wall:
+                    strtext = " |"
+                elif square.down_wall:
+                    strtext = "__"
+                else:
+                    strtext = "  "
+                self.stdscr.addstr(y, x * 2, strtext[0], curses.color_pair(color))
+                self.stdscr.addstr(y, x * 2 + 1, strtext[1], curses.color_pair(color))
+    
     def outputboard(self):
         print
         print "Current: %s" % self.current_square
@@ -180,12 +203,18 @@ class Maze:
         else:
             self.exit_square = self.board[rand.randint(0, height - 1)][width - 1]
             self.exit_square.right_wall = False
-        self.explore_neighbors(self.enter_square)
+       
+        # direction is [y, x]. This is to introduce a slight bias to make the maze with straighter corridors
+        if rand.randint(0, 1) == 0:
+            direction = [0, 1]
+        else:
+            direction = [1, 0]
+        self.explore_neighbors(self.enter_square, direction)
         
         self.current_square = self.enter_square
         self.current_square.visited = True
 
-    def explore_neighbors(self, square):
+    def explore_neighbors(self, square, direction):
         """
             Explore unvisited neighbors in random order
             
@@ -206,21 +235,19 @@ class Maze:
         rand = random.Random()
         rand.shuffle(nbrs)
 
+        straight_coords = [square.y + direction[0], square.x + direction[1]]
+        if straight_coords[0] in self.board and straight_coords[1] in self.board[straight_coords[0]]:
+            straight_neighbor = self.board[straight_coords[0]][straight_coords[1]]
+
+            if rand.random() < self.STRAIGHT_BIAS and straight_neighbor in nbrs:
+                nbrs.remove(straight_neighbor)
+                nbrs.insert(0, straight_neighbor)
+
         for nbr in nbrs:
             if not nbr.visited:
                 #nbr.visited = True
                 square.destroy_wall(nbr)
-                self.explore_neighbors(nbr)
-
-
-
-
-
-
-
-
-
-
+                self.explore_neighbors(nbr, [nbr.y - square.y, nbr.x - square.x])
 
 
 class Square:
