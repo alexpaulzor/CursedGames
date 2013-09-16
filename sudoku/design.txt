@@ -1,0 +1,29 @@
+
+
+Square:
+  x
+  y
+  is_given - immutable given by puzzle
+  is_certain - positively inferred
+  possible_values - list of booleans? bitmask?
+  value - integer if certain
+  sets - sets this square belongs to
+
+  set_value()
+
+Set:
+  squares - set of squares that equal a complete row/column/square/region
+  is_solved - if all Squares have is_certain set
+  ? values - map of num to Square with is_certain
+  num_unknown_values
+
+  try_infer_remaining()
+
+Game:
+  squares - x/y layout
+  sets
+
+Solver:
+  ? enforce_rules(square) - cascades changes across all relevant squares/sets
+  
+
