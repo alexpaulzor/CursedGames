@@ -18,21 +18,32 @@ class Maze:
     def visit_neighbors(self, square):
         square.visible = True
         if square.x > 0:
-            left_neighbor = self.board[square.y][square.x - 1]
-            if not left_neighbor.right_wall:
+            left_neighbor = self.board[square.y][square.x]
+            while left_neighbor and not left_neighbor.right_wall:
                 left_neighbor.visible = True
+                if left_neighbor.x > 0:
+                    left_neighbor = self.board[left_neighbor.y][left_neighbor.x - 1]
+                else:
+                    left_neighbor = None
+
         if square.y > 0:
             top_neighbor = self.board[square.y - 1][square.x]
-            if not top_neighbor.down_wall:
+            while top_neighbor and not top_neighbor.down_wall:
                 top_neighbor.visible = True
+                if top_neighbor.y > 0:
+                    top_neighbor = self.board[top_neighbor.y - 1][top_neighbor.x]
+                else:
+                    top_neighbor = None
         if not square.right_wall and square.x < len(self.board[0]) - 1:
-            right_neighbor = self.board[square.y][square.x + 1]
-            right_neighbor.visible = True
+            right_neighbor = square
+            while right_neighbor and not right_neighbor.right_wall and right_neighbor.x < len(self.board[0]) - 1:
+                right_neighbor = self.board[right_neighbor.y][right_neighbor.x + 1]
+                right_neighbor.visible = True
         if not square.down_wall and square.y < len(self.board) - 1:
-            down_neighbor = self.board[square.y + 1][square.x]
-            down_neighbor.visible = True
-
-
+            down_neighbor = square
+            while down_neighbor and not down_neighbor.down_wall and down_neighbor.y < len(self.board) - 1:
+                down_neighbor = self.board[down_neighbor.y + 1][down_neighbor.x]
+                down_neighbor.visible = True
 
     def newgame(self, stdscr):
         self.current_square = self.enter_square
