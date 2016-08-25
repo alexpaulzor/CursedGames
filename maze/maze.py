@@ -2,11 +2,13 @@
 
 import curses
 import random
+import time
 
 class Maze:
     STRAIGHT_BIAS = 0.3
 
     board = {}
+    solution = [] # stack
 
     def __init__(self, width, height):
         self.width = width
@@ -45,43 +47,70 @@ class Maze:
                 down_neighbor = self.board[down_neighbor.y + 1][down_neighbor.x]
                 down_neighbor.visible = True
 
+    def visit_square(self, square):
+        if len(self.solution) > 1 and self.solution[-2] == square:
+            # backtracking
+            self.solution.pop()
+        else:
+            self.solution.append(square)
+        self.current_square = square
+        self.visit_neighbors(square)
+
     def newgame(self, stdscr):
         self.current_square = self.enter_square
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
         curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_RED)
         curses.init_pair(3, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_GREEN)
         self.stdscr = stdscr
         self.stdscr.clear()
         self.printwholeboard()
         #self.printboard()
         self.stdscr.refresh()
         key = None
-        while (key != 'q'):
+        while (key != 'q') and not self.haswon():
             key = self.stdscr.getkey()
-            if (key == 'KEY_LEFT' or key == 'h') and self.current_square.x > 0:
-                neighbor = self.board[self.current_square.y][self.current_square.x - 1]
-                if not neighbor.right_wall:
-                    self.current_square = neighbor
-                    self.visit_neighbors(self.current_square)
-            elif (key == 'KEY_RIGHT' or key == 'l') and not self.current_square.right_wall and self.current_square.x < len(self.board[0]) - 1:
-                neighbor = self.board[self.current_square.y][self.current_square.x + 1]
-                self.current_square = neighbor
-                self.visit_neighbors(self.current_square)
-            elif (key == 'KEY_UP' or key == 'k') and self.current_square.y > 0:
-                neighbor = self.board[self.current_square.y - 1][self.current_square.x]
-                if not neighbor.down_wall:
-                    self.current_square = neighbor
-                    self.visit_neighbors(self.current_square)
-            elif (key == 'KEY_DOWN' or key == 'j') and not self.current_square.down_wall and self.current_square.y < len(self.board) - 1:
-                neighbor = self.board[self.current_square.y + 1][self.current_square.x]
-                self.current_square = neighbor
-                self.visit_neighbors(self.current_square)
-            if self.haswon():
-                self.retval = "You win!"
-                return
-            self.printboard()
-            self.stdscr.refresh()
+            self.process_key(key)
         self.retval = "Goodbye"
+
+    def process_key(self, key):
+        last_square = self.current_square
+        if (key == 'KEY_LEFT' or key == 'h') and self.current_square.x > 0:
+            neighbor = self.board[self.current_square.y][self.current_square.x - 1]
+            if not neighbor.right_wall:
+                self.visit_square(neighbor)
+        elif (key == 'KEY_RIGHT' or key == 'l') and not self.current_square.right_wall and self.current_square.x < len(self.board[0]) - 1:
+            neighbor = self.board[self.current_square.y][self.current_square.x + 1]
+            self.visit_square(neighbor)
+        elif (key == 'KEY_UP' or key == 'k') and self.current_square.y > 0:
+            neighbor = self.board[self.current_square.y - 1][self.current_square.x]
+            if not neighbor.down_wall:
+                self.visit_square(neighbor)
+        elif (key == 'KEY_DOWN' or key == 'j') and not self.current_square.down_wall and self.current_square.y < len(self.board) - 1:
+            neighbor = self.board[self.current_square.y + 1][self.current_square.x]
+            self.visit_square(neighbor)
+        elif key == 's':
+            self.solve()
+        if self.haswon():
+            self.retval = "You win!"
+        self.printboard()
+        self.stdscr.refresh()
+        return last_square != self.current_square
+
+    def solve(self):
+        avail_keys = ['h', 'k', 'l', 'j']
+        direction = random.randint(0, len(avail_keys))
+        while not self.haswon():
+           if not self.process_key(avail_keys[direction]):
+               direction = (direction + 1) % len(avail_keys)
+           time.sleep(0.1)
+           #random.shuffle(avail_keys)
+           #key = random.sample(avail_keys, 1)[0]
+           #last_square = None
+           #while self.current_square != last_square and (last_square is None or last_square in self.solution):
+           #    last_square = self.current_square
+           #    self.process_key(key)
+           #    time.sleep(0.1)
 
     def haswon(self):
         return self.current_square == self.exit_square
@@ -107,6 +136,8 @@ class Maze:
                     color = 2
                 elif square == self.exit_square:
                     color = 3
+                elif square in self.solution:
+                    color = 4
                 show_right = False
                 show_down = False
                 if square.visible:
@@ -156,6 +187,8 @@ class Maze:
                     color = 2
                 elif square == self.exit_square:
                     color = 3
+                elif square in self.solution:
+                    color = 4
                 if square.down_wall and square.right_wall:
                     strtext = "_|"
                 elif square.right_wall:
