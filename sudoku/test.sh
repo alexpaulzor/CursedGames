@@ -1,3 +1,3 @@
 #!/bin/bash
 
-python sudoku.py "$(head -n1 puzzles/easy.txt)"
+python sudoku.py "$(gsort -R ${1:-puzzles/hard.txt} | head -n1)"

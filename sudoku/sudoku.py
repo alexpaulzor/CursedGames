@@ -1,6 +1,8 @@
 
 #!/usr/bin/env python
 
+import curses
+
 import sys
 from collections import defaultdict
 
@@ -36,12 +38,12 @@ class Sudoku:
           return False
     return True
 
-  def flush(self):
+  def flush(self, steps=1):
     for s in self.sets:
-      s.flush()
+      steps = s.flush(steps)
     for row in self.grid:
       for square in row:
-        square.flush()
+        steps = square.flush(steps)
 
   def build_rows(self):
     for y in range(9):
@@ -113,6 +115,140 @@ class Sudoku:
     print "\n".join(board)
 
 
+  def draw_board(self):
+    horiz_sep =       "#-------+-------+-------#-------+-------+-------#-------+-------+-------#"
+    major_horiz_sep = "#=======+=======+=======#=======+=======+=======#=======+=======+=======#"
+    blank_line      = "#       |       |       #       |       |       #       |       |       #"
+    liney = 0
+    self.stdscr.addstr(liney, 0, major_horiz_sep)
+    liney += 1
+    selected_square = self.grid[self.cursor_y][self.cursor_x]
+    for y in range(9):
+      linex = 0
+      for line in range(3):
+        self.stdscr.addstr(liney, 0, blank_line)
+        linex = 1
+        for x in range(9):
+          square = self.grid[y][x]
+
+          if self.cursor_x == x and self.cursor_y == y:
+            self.stdscr.addstr(liney, linex, "       ", curses.color_pair(10))
+          elif square.get_value() and selected_square.get_value() == square.get_value():
+            self.stdscr.addstr(liney, linex, "       ", curses.color_pair(12))
+          for i in range(line * 3 + 1, line * 3 + 4):
+            if i in square.possible_values and not square.is_unknown():
+              if square.is_given:
+                self.stdscr.addstr(liney, linex, " ", curses.color_pair(11))
+              self.stdscr.addstr(liney, linex + 1, "{}".format(i), curses.color_pair(i))
+            linex += 2
+          linex += 2
+        liney += 1
+
+      if (y+1) % 3 == 0:
+        self.stdscr.addstr(liney, 0, major_horiz_sep)
+      else:
+        self.stdscr.addstr(liney, 0, horiz_sep)
+      liney += 1
+
+    value_counts = {i: 0 for i in range(1, 10)}
+    for row in self.grid:
+      for sq in row:
+        v = sq.get_value()
+        if v is not None:
+          value_counts[v] += 1
+
+    for i in range(1, 10):
+      self.stdscr.addstr(i, 9 * 9, str(i), curses.color_pair(i))
+      self.stdscr.addstr(i,
+                         9 * 9 + 1,
+                         ": {}         ".format(value_counts[i]),
+                         curses.color_pair(12 if value_counts[i] == 9 else 0))
+
+    self.stdscr.refresh()
+
+
+  def draw_small_board(self):
+    horiz_sep = "+-+-+-+-+-+-+-+-+-+"
+    #board = [horiz_sep]
+    self.stdscr.addstr(0, 0, horiz_sep)
+    for y in range(9):
+      linex = 0
+      #line = "|"
+      self.stdscr.addstr(2 * y + 1, 0, "|")
+      linex += 1
+      for x in range(9):
+        square = self.grid[y][x]
+        if square.get_value():
+          #line += "{}".format(square.get_value())
+          self.stdscr.addstr(2 * y + 1,
+                             linex,
+                             "{}".format(square.get_value()),
+                             curses.color_pair(square.get_value()))
+          linex += 1
+        else:
+          #line += " "
+          self.stdscr.addstr(2 * y + 1, linex, " ")
+          linex += 1
+        #line += '|'
+        self.stdscr.addstr(2 * y + 1, linex, "|")
+        linex += 1
+      #board += [line]
+      #board += [horiz_sep]
+      self.stdscr.addstr(2 * y + 2, 0, horiz_sep)
+    self.stdscr.refresh()
+    #print "\n".join(board)
+
+  def newgame(self, stdscr):
+    self._init_colors()
+    self.stdscr = stdscr
+    self.stdscr.clear()
+    self.cursor_x = 0
+    self.cursor_y = 0
+    self.draw_board()
+
+    key = None
+    while key != 'q' and not self.is_solved():
+
+      key = self.stdscr.getkey()
+      if key == 's':
+        self.flush(1)
+      elif (key == 'KEY_LEFT' or key == 'h'):
+        self.cursor_x -= 1
+      elif (key == 'KEY_RIGHT' or key == 'l'):
+        self.cursor_x += 1
+      elif (key == 'KEY_UP' or key == 'k'):
+        self.cursor_y -= 1
+      elif (key == 'KEY_DOWN' or key == 'j'):
+        self.cursor_y += 1
+      elif key in map(str, range(1, 10)):
+        self.grid[self.cursor_y][self.cursor_x].toggle_mark(int(key))
+      elif key == 'c':
+        self.grid[self.cursor_y][self.cursor_x].clear()
+      elif key == 't':
+        self.grid[self.cursor_y][self.cursor_x].flush(1)
+      # elif key == 't':
+      #   sq = self.grid[self.cursor_y][self.cursor_x]
+      #   sq.flush(2)
+
+      self.cursor_x = self.cursor_x % 9
+      self.cursor_y = self.cursor_y % 9
+      self.draw_board()
+    self.draw_board()
+
+  def _init_colors(self):
+    curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
+    curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
+    curses.init_pair(3, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
+    curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+    curses.init_pair(5, curses.COLOR_RED, curses.COLOR_BLACK)
+    curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+    curses.init_pair(7, curses.COLOR_CYAN, curses.COLOR_BLUE)
+    curses.init_pair(8, curses.COLOR_GREEN, curses.COLOR_BLUE)
+    curses.init_pair(9, curses.COLOR_MAGENTA, curses.COLOR_BLUE)
+    curses.init_pair(10, curses.COLOR_WHITE, curses.COLOR_GREEN)
+    curses.init_pair(11, curses.COLOR_WHITE, curses.COLOR_BLUE)
+    curses.init_pair(12, curses.COLOR_BLACK, curses.COLOR_CYAN)
+
 class Solvable(object):
   """Solvable handles the notification of dependent exclusivity sets.
   """
@@ -121,13 +257,20 @@ class Solvable(object):
     """Override to compute if the requirement is satisfied"""
     return True
 
+  def try_solve(self):
+    """Override me"""
+    pass
+
   def __init__(self):
     self.notifies = set()
     self.solved = False
     self.visited = False
     self.changed = False
 
-  def flush(self):
+  def flush(self, steps=1):
+    if steps <= 0:
+      return 0
+    self.try_solve()
     if self.solved != self.is_solved():
       self.changed = True
       self.solved = self.is_solved()
@@ -135,7 +278,8 @@ class Solvable(object):
     if self.changed:
       self.changed = False
       for solvable in self.notifies:
-        solvable.flush()
+        steps = solvable.flush(steps - 1)
+    return steps
 
   def add_notify(self, solvable):
     if solvable not in self.notifies:
@@ -150,8 +294,20 @@ class Square(Solvable):
     self.is_given = False
     self.possible_values = set(range(1, 10))
 
+  def clear(self):
+    if not self.is_given:
+      self.possible_values = set(range(1, 10))
+      self.changed = True
+
   def is_solved(self):
     return len(self.possible_values) == 1
+
+  def try_solve(self):
+    for n in self.notifies:
+      n.try_solve()
+
+  def is_unknown(self):
+    return len(self.possible_values) == 9
 
   def get_value(self):
     if not self.is_solved():
@@ -172,6 +328,18 @@ class Square(Solvable):
       return True
     return False
 
+  def toggle_mark(self, value):
+    if self.is_given:
+      return
+    if self.is_unknown():
+      self.set_value(value)
+      return
+    if value in self.possible_values:
+      self.rule_out_values(set([value]))
+    else:
+      self.possible_values.add(value)
+      self.changed = True
+
   def __repr__(self):
     return "{}: {}->{}".format(self.name, self.possible_values, self.get_value())
 
@@ -188,18 +356,20 @@ class ExclusiveSet(Solvable):
   def is_solved(self):
     if self.solved:
       return True
-
     known_values = self.known_values()
     if len(known_values) == len(self.squares) and None not in known_values:
       return True
+
+  def try_solve(self):
+    known_values = self.known_values()
     known_values.discard(None)
-    self._eliminate_known_values(known_values)
+    self.eliminate_known_values(known_values)
     self._eliminate_subsets()
     self._infer_values()
 
     return False
 
-  def _eliminate_known_values(self, known_values):
+  def eliminate_known_values(self, known_values):
     for s in self.squares:
       if not s.is_solved():
         s.rule_out_values(known_values)
@@ -273,13 +443,13 @@ class ExclusiveSet(Solvable):
     return "{}: {}".format(self.name, self.known_values())
 
 
+
+
 if __name__ == "__main__":
   if len(sys.argv) == 2:
     s = Sudoku()
     s.load_game(sys.argv[1])
-    s.print_board()
-    while not s.is_solved():
-      sys.stdin.readline()
-      s.flush()
-      s.print_board()
+    curses.wrapper(s.newgame)
+    if s.is_solved():
+      print "You won!"
 
