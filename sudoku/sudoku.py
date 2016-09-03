@@ -135,6 +135,10 @@ class Sudoku:
             self.stdscr.addstr(liney, linex, "       ", curses.color_pair(10))
           elif square.get_value() and selected_square.get_value() == square.get_value():
             self.stdscr.addstr(liney, linex, "       ", curses.color_pair(12))
+          elif square.get_value() and \
+              not selected_square.is_unknown() and \
+              square.get_value() in selected_square.possible_values:
+            self.stdscr.addstr(liney, linex, "       ", curses.color_pair(13))
           for i in range(line * 3 + 1, line * 3 + 4):
             if i in square.possible_values and not square.is_unknown():
               if square.is_given:
@@ -248,6 +252,7 @@ class Sudoku:
     curses.init_pair(10, curses.COLOR_WHITE, curses.COLOR_GREEN)
     curses.init_pair(11, curses.COLOR_WHITE, curses.COLOR_BLUE)
     curses.init_pair(12, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    curses.init_pair(13, curses.COLOR_BLACK, curses.COLOR_RED)
 
 class Solvable(object):
   """Solvable handles the notification of dependent exclusivity sets.
@@ -314,8 +319,9 @@ class Square(Solvable):
       return None
     return tuple(self.possible_values)[0]
 
-  def set_value(self, value, given=False):
-    self.is_given = given
+  def set_value(self, value, given=None):
+    if given is not None:
+      self.is_given = given
     self.possible_values = set([value])
     self.changed = True
 
