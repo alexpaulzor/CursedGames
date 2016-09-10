@@ -10,6 +10,7 @@ class Sudoku:
   def __init__(self):
     self.grid = [ [ Square(row, col) for col in range(9) ] for row in range(9) ]
     self.sets = set()
+    self.draw_small = False
     self.build_rows()
     self.build_columns()
     self.build_sectors()
@@ -21,12 +22,14 @@ class Sudoku:
     if len(line) != 81:
       print "Invalid line!"
       sys.exit(1)
+
     for y in range(9):
       for x in range(9):
         char = line[y * 9 + x]
         if char != "." and char != " ":
           val = int(char)
           self.grid[y][x].set_value(val, True)
+    self.original_state = line
 
   def is_solved(self):
     for s in self.sets:
@@ -68,54 +71,56 @@ class Sudoku:
             sector.add_square(self.grid[y][x])
         self.sets.add(sector)
 
-  def print_board(self):
-    for s in self.sets:
-      print s
-      for sq in s.squares:
-        print "  {}".format(sq)
-    horiz_sep =       "#-------+-------+-------#-------+-------+-------#-------+-------+-------#"
-    major_horiz_sep = "#=======+=======+=======#=======+=======+=======#=======+=======+=======#"
-    board = [major_horiz_sep]
-    for y in range(9):
-      lines = ["# " for l in range(3)]
-      for x in range(9):
-        square = self.grid[y][x]
-        for i in range(1, 10):
-          if i in square.possible_values:
-          #if i == square.get_value():
-            lines[(i-1) / 3] += "{} ".format(i)
-          else:
-            lines[(i-1) / 3] += "  "
-        for l in range(3):
-          if (x+1) % 3 == 0:
-            lines[l] += '# '
-          else:
-            lines[l] += '| '
-      board += lines
-      if (y+1) % 3 == 0:
-        board += [major_horiz_sep]
-      else:
-        board += [horiz_sep]
-    print "\n".join(board)
+  # def print_board(self):
+  #   for s in self.sets:
+  #     print s
+  #     for sq in s.squares:
+  #       print "  {}".format(sq)
+  #   horiz_sep =       "#-------+-------+-------#-------+-------+-------#-------+-------+-------#"
+  #   major_horiz_sep = "#=======+=======+=======#=======+=======+=======#=======+=======+=======#"
+  #   board = [major_horiz_sep]
+  #   for y in range(9):
+  #     lines = ["# " for l in range(3)]
+  #     for x in range(9):
+  #       square = self.grid[y][x]
+  #       for i in range(1, 10):
+  #         if i in square.possible_values:
+  #         #if i == square.get_value():
+  #           lines[(i-1) / 3] += "{} ".format(i)
+  #         else:
+  #           lines[(i-1) / 3] += "  "
+  #       for l in range(3):
+  #         if (x+1) % 3 == 0:
+  #           lines[l] += '# '
+  #         else:
+  #           lines[l] += '| '
+  #     board += lines
+  #     if (y+1) % 3 == 0:
+  #       board += [major_horiz_sep]
+  #     else:
+  #       board += [horiz_sep]
+  #   print "\n".join(board)
 
-  def print_small_board(self):
-    horiz_sep = "+-+-+-+-+-+-+-+-+-+"
-    board = [horiz_sep]
-    for y in range(9):
-      line = "|"
-      for x in range(9):
-        square = self.grid[y][x]
-        if square.get_value():
-          line += "{}".format(square.get_value())
-        else:
-          line += " "
-        line += '|'
-      board += [line]
-      board += [horiz_sep]
-    print "\n".join(board)
+  # def print_small_board(self):
+  #   horiz_sep = "+-+-+-+-+-+-+-+-+-+"
+  #   board = [horiz_sep]
+  #   for y in range(9):
+  #     line = "|"
+  #     for x in range(9):
+  #       square = self.grid[y][x]
+  #       if square.get_value():
+  #         line += "{}".format(square.get_value())
+  #       else:
+  #         line += " "
+  #       line += '|'
+  #     board += [line]
+  #     board += [horiz_sep]
+  #   print "\n".join(board)
 
 
   def draw_board(self):
+    if self.draw_small:
+      return self.draw_small_board()
     horiz_sep =       "#-------+-------+-------#-------+-------+-------#-------+-------+-------#"
     major_horiz_sep = "#=======+=======+=======#=======+=======+=======#=======+=======+=======#"
     blank_line      = "#       |       |       #       |       |       #       |       |       #"
@@ -123,6 +128,7 @@ class Sudoku:
     self.stdscr.addstr(liney, 0, major_horiz_sep)
     liney += 1
     selected_square = self.grid[self.cursor_y][self.cursor_x]
+    conflicts = selected_square.conflict_squares()
     for y in range(9):
       linex = 0
       for line in range(3):
@@ -133,17 +139,14 @@ class Sudoku:
 
           if self.cursor_x == x and self.cursor_y == y:
             self.stdscr.addstr(liney, linex, "       ", curses.color_pair(10))
+          elif not selected_square.is_unknown() and square in conflicts:
+            self.stdscr.addstr(liney, linex, "       ", curses.color_pair(13))
           elif square.get_value() and selected_square.get_value() == square.get_value():
             self.stdscr.addstr(liney, linex, "       ", curses.color_pair(12))
-          elif square.get_value() and \
-              not selected_square.is_unknown() and \
-              square.get_value() in selected_square.possible_values:
-            self.stdscr.addstr(liney, linex, "       ", curses.color_pair(13))
           for i in range(line * 3 + 1, line * 3 + 4):
             if i in square.possible_values and not square.is_unknown():
-              if square.is_given:
-                self.stdscr.addstr(liney, linex, " ", curses.color_pair(11))
-              self.stdscr.addstr(liney, linex + 1, "{}".format(i), curses.color_pair(i))
+              attributes = curses.A_UNDERLINE if square.is_given else 0
+              self.stdscr.addstr(liney, linex + 1, "{}".format(i), curses.color_pair(i)|attributes)
             linex += 2
           linex += 2
         liney += 1
@@ -172,35 +175,55 @@ class Sudoku:
 
 
   def draw_small_board(self):
-    horiz_sep = "+-+-+-+-+-+-+-+-+-+"
-    #board = [horiz_sep]
-    self.stdscr.addstr(0, 0, horiz_sep)
+    horiz_sep =       "#---+---+---#---+---+---#---+---+---#"
+    major_horiz_sep = "#===+===+===#===+===+===#===+===+===#"
+    blank_line      = "#   |   |   #   |   |   #   |   |   #"
+    liney = 0
+    self.stdscr.addstr(liney, 0, major_horiz_sep)
+    liney += 1
+    selected_square = self.grid[self.cursor_y][self.cursor_x]
+    conflicts = selected_square.conflict_squares()
     for y in range(9):
       linex = 0
-      #line = "|"
-      self.stdscr.addstr(2 * y + 1, 0, "|")
-      linex += 1
+      self.stdscr.addstr(liney, 0, blank_line)
+      linex = 1
       for x in range(9):
         square = self.grid[y][x]
-        if square.get_value():
-          #line += "{}".format(square.get_value())
-          self.stdscr.addstr(2 * y + 1,
-                             linex,
-                             "{}".format(square.get_value()),
-                             curses.color_pair(square.get_value()))
-          linex += 1
-        else:
-          #line += " "
-          self.stdscr.addstr(2 * y + 1, linex, " ")
-          linex += 1
-        #line += '|'
-        self.stdscr.addstr(2 * y + 1, linex, "|")
-        linex += 1
-      #board += [line]
-      #board += [horiz_sep]
-      self.stdscr.addstr(2 * y + 2, 0, horiz_sep)
+
+        if self.cursor_x == x and self.cursor_y == y:
+          self.stdscr.addstr(liney, linex, "   ", curses.color_pair(10))
+        elif not selected_square.is_unknown() and square in conflicts:
+          self.stdscr.addstr(liney, linex, "   ", curses.color_pair(13))
+        elif square.get_value() and selected_square.get_value() == square.get_value():
+          self.stdscr.addstr(liney, linex, "   ", curses.color_pair(12))
+        i = square.get_value()
+        if i:
+          attributes = curses.A_UNDERLINE if square.is_given else 0
+          self.stdscr.addstr(liney, linex + 1, "{}".format(i), curses.color_pair(i)|attributes)
+        linex += 4
+      liney += 1
+
+      if (y+1) % 3 == 0:
+        self.stdscr.addstr(liney, 0, major_horiz_sep)
+      else:
+        self.stdscr.addstr(liney, 0, horiz_sep)
+      liney += 1
+
+    value_counts = {i: 0 for i in range(1, 10)}
+    for row in self.grid:
+      for sq in row:
+        v = sq.get_value()
+        if v is not None:
+          value_counts[v] += 1
+
+    for i in range(1, 10):
+      self.stdscr.addstr(i, 9 * 9, str(i), curses.color_pair(i))
+      self.stdscr.addstr(i,
+                         9 * 9 + 1,
+                         ": {}         ".format(value_counts[i]),
+                         curses.color_pair(12 if value_counts[i] == 9 else 0))
+
     self.stdscr.refresh()
-    #print "\n".join(board)
 
   def newgame(self, stdscr):
     self._init_colors()
@@ -209,14 +232,14 @@ class Sudoku:
     self.cursor_x = 0
     self.cursor_y = 0
     self.draw_board()
+    self.draw_small = False
 
     key = None
     while key != 'q' and not self.is_solved():
 
       key = self.stdscr.getkey()
-      if key == 's':
-        self.flush(1)
-      elif (key == 'KEY_LEFT' or key == 'h'):
+
+      if (key == 'KEY_LEFT' or key == 'h'):
         self.cursor_x -= 1
       elif (key == 'KEY_RIGHT' or key == 'l'):
         self.cursor_x += 1
@@ -228,11 +251,13 @@ class Sudoku:
         self.grid[self.cursor_y][self.cursor_x].toggle_mark(int(key))
       elif key == 'c':
         self.grid[self.cursor_y][self.cursor_x].clear()
-      elif key == 't':
-        self.grid[self.cursor_y][self.cursor_x].flush(1)
       # elif key == 't':
-      #   sq = self.grid[self.cursor_y][self.cursor_x]
-      #   sq.flush(2)
+      #   self.grid[self.cursor_y][self.cursor_x].flush(1)
+      elif key == 's':
+        self.draw_small = not self.draw_small
+        self.stdscr.clear()
+      # elif key == 's':
+      #   self.flush(1)
 
       self.cursor_x = self.cursor_x % 9
       self.cursor_y = self.cursor_y % 9
@@ -325,14 +350,14 @@ class Square(Solvable):
     self.possible_values = set([value])
     self.changed = True
 
-  def rule_out_values(self, values):
-    if self.is_solved():
-      return False
-    if any(values & self.possible_values):
-      self.possible_values -= values
-      self.changed = True
-      return True
-    return False
+  # def rule_out_values(self, values):
+  #   if self.is_solved():
+  #     return False
+  #   if any(values & self.possible_values):
+  #     self.possible_values -= values
+  #     self.changed = True
+  #     return True
+  #   return False
 
   def toggle_mark(self, value):
     if self.is_given:
@@ -341,10 +366,24 @@ class Square(Solvable):
       self.set_value(value)
       return
     if value in self.possible_values:
-      self.rule_out_values(set([value]))
+      self.possible_values.remove(value)
     else:
       self.possible_values.add(value)
       self.changed = True
+
+  def conflict_squares(self):
+    sqs = set()
+    if self.is_unknown():
+      return sqs
+    for notify in self.notifies:
+      for square in notify.squares:
+        if not square.is_unknown() and square != self:
+          if square.get_value() and square.get_value() in self.possible_values:
+            sqs.add(square)
+          elif self.get_value() and self.get_value() in square.possible_values:
+            sqs.add(square)
+
+    return sqs
 
   def __repr__(self):
     return "{}: {}->{}".format(self.name, self.possible_values, self.get_value())
@@ -366,54 +405,58 @@ class ExclusiveSet(Solvable):
     if len(known_values) == len(self.squares) and None not in known_values:
       return True
 
-  def try_solve(self):
-    known_values = self.known_values()
-    known_values.discard(None)
-    self.eliminate_known_values(known_values)
-    self._eliminate_subsets()
-    self._infer_values()
+  def add_square(self, square):
+    self.squares.add(square)
+    self.add_notify(square)
 
-    return False
+  def __repr__(self):
+    return "{}: {}".format(self.name, self.known_values())
 
-  def eliminate_known_values(self, known_values):
-    for s in self.squares:
-      if not s.is_solved():
-        s.rule_out_values(known_values)
+  # def try_solve(self):
+  #   known_values = self.known_values()
+  #   known_values.discard(None)
+  #   self.eliminate_known_values(known_values)
+  #   self._eliminate_subsets()
+  #   self._infer_values()
 
-  def _eliminate_subsets(self):
-    """Find groups within a set of size n (usually 2 or 3) that all
-    share the same <= n possible values.
-    Subtract those values from all other squares in the set
-    """
-    # keys: string of ordered digits in possible_values
-    # values: set of squares
-    subsets = defaultdict(set)
-    for sq in self.squares:
-      if not sq.is_solved():
-        key = ''.join(map(str, sorted(sq.possible_values)))
-        subsets[key].add(sq)
+  #   return False
 
-    for key in subsets:
-      for sq in self.squares:
-        if sq.possible_values <= set(map(int, key)):
-          subsets[key].add(sq)
+  # def eliminate_known_values(self, known_values):
+  #   for s in self.squares:
+  #     if not s.is_solved():
+  #       s.rule_out_values(known_values)
 
-    for key in subsets:
-      # If there are as many equivalently unknown hosts as unknowns,
-      # exclude that set from the rest
-      if len(key) == len(subsets[key]):
-        for sq in self.squares - subsets[key]:
-          sq.rule_out_values(set(map(int, key)))
+  # def _eliminate_subsets(self):
+  #   """Find groups within a set of size n (usually 2 or 3) that all
+  #   share the same <= n possible values.
+  #   Subtract those values from all other squares in the set
+  #   """
+  #   # keys: string of ordered digits in possible_values
+  #   # values: set of squares
+  #   subsets = defaultdict(set)
+  #   for sq in self.squares:
+  #     if not sq.is_solved():
+  #       key = ''.join(map(str, sorted(sq.possible_values)))
+  #       subsets[key].add(sq)
 
-  def _infer_values(self):
-    squares_for_value = {i: filter(lambda sq: i in sq.possible_values, self.squares) for i in range(1, 10)}
-    for i in squares_for_value:
-      if len(squares_for_value[i]) == 1:
-        squares_for_value[i][0].set_value(i)
+  #   for key in subsets:
+  #     for sq in self.squares:
+  #       if sq.possible_values <= set(map(int, key)):
+  #         subsets[key].add(sq)
 
+  #   for key in subsets:
+  #     # If there are as many equivalently unknown hosts as unknowns,
+  #     # exclude that set from the rest
+  #     if len(key) == len(subsets[key]):
+  #       for sq in self.squares - subsets[key]:
+  #         sq.rule_out_values(set(map(int, key)))
 
-  def something_else(self):
-    pass
+  # def _infer_values(self):
+  #   squares_for_value = {i: filter(lambda sq: i in sq.possible_values, self.squares) for i in range(1, 10)}
+  #   for i in squares_for_value:
+  #     if len(squares_for_value[i]) == 1:
+  #       squares_for_value[i][0].set_value(i)
+
 
     #     for v in s.possible_values:
     #       possible_values[v].add(s)
@@ -440,13 +483,6 @@ class ExclusiveSet(Solvable):
 
 
     # return False
-
-  def add_square(self, square):
-    self.squares.add(square)
-    self.add_notify(square)
-
-  def __repr__(self):
-    return "{}: {}".format(self.name, self.known_values())
 
 
 
