@@ -17,8 +17,13 @@ class Sudoku:
       "1-9: toggle number",
       "c: clear",
       "s: toggle small board",
-      "a: autosolve"
+      "a: autosolve step",
+      "A: autosolve until key press",
+      "R: reset board"
     ]))
+    self.cursor_x = 0
+    self.cursor_y = 0
+    self.go_forward = True
     self.build_rows()
     self.build_columns()
     self.build_sectors()
@@ -38,7 +43,21 @@ class Sudoku:
         if char != "." and char != " ":
           val = int(char)
           self.grid[y][x].set_value(val, True)
+        else:
+          self.grid[y][x].clear()
     self.original_state = line
+
+  def current_state(self):
+    # return the state of the board as would be loaded
+    line = ''
+    for y in range(9):
+      for x in range(9):
+        sq = self.grid[y][x]
+        if sq.get_value():
+          line += str(sq.get_value())
+        else:
+          line += '.'
+    return line
 
   def is_solved(self):
     for s in self.sets:
@@ -50,46 +69,50 @@ class Sudoku:
           return False
     return True
 
-  def solve(self):
-    y = 0
-    x = 0
-    while y < 9 and x < 9:
-      square = self.grid[y][x]
-      self.log.append("solving {}".format(square))
-      go_forward = True
-      if square.is_given:
-        if self.check_solution():
-          go_forward = True
-        else:
-          go_forward = False
-      else:
+  def solve(self, steps=1):
+    while self.cursor_y < 9 and self.cursor_x < 9 and steps > 0:
+      steps -= 1
+      square = self.grid[self.cursor_y][self.cursor_x]
+      #self.log.append("{} solving {}".format(self.go_forward, square))
+      if not square.is_given:
         if not square.get_value():
           square.set_value(1)
-        while go_forward and not self.check_solution():
+          self.go_forward = True
+        if not self.go_forward:
+          if square.get_value() < 9:
+            square.set_value(square.get_value() + 1)
+            self.go_forward = True
+          else:
+            square.clear()
+        while self.go_forward and not self.check_solution():
+          #self.log.append("{} solving {}".format(self.go_forward, square))
           if square.get_value() == 9:
             square.clear()
-            go_forward = False
+            self.go_forward = False
           else:
             square.set_value(square.get_value() + 1)
 
-      if go_forward :
+      if self.go_forward:
         # advance
-        if x == 8:
-          y += 1
-          x = 0
+        if self.cursor_x == 8:
+          self.cursor_y += 1
+          self.cursor_x = 0
+          if self.cursor_y == 9:
+            self.cursor_y = 0
         else:
-          x += 1
+          self.cursor_x += 1
       else:
         # go back
-        if x > 0:
-          x -= 1
-        elif y > 0:
-          y -= 1
-          x = 8
+        if self.cursor_x > 0:
+          self.cursor_x -= 1
+        elif self.cursor_y > 0:
+          self.cursor_y -= 1
+          self.cursor_x = 8
         else:
           # back at 0,0
-          pass
-      self.draw_board()
+          #self.go_forward = True
+          self.cursor_x = 8
+          self.cursor_y = 8
 
 
   def check_solution(self):
@@ -97,22 +120,23 @@ class Sudoku:
       # check column y
       values = filter(None, [self.grid[y][i].get_value() for i in range(9)])
       if len(values) != len(set(values)):
-        self.log.append("column {} invalid: {}".format(y, str(values)))
+        #self.log.append("row {} invalid: {}".format(y, str(sorted(values))))
         return False
       for x in range(9):
         # check row
         values = filter(None, [self.grid[i][x].get_value() for i in range(9)])
         if len(values) != len(set(values)):
-          self.log.append("row {} invalid: {}".format(x, str(values)))
+          #self.log.append("col {} invalid: {}".format(x, str(sorted(values))))
           return False
     # check 3x3 grids
     for qy in range(3):
       for qx in range(3):
-        values = filter(None, [self.grid[qy + i % 3][qx + i / 3].get_value() for i in range(9)])
+        #self.log.append("grid {},{}: {}".format(qy, qx, ["{},{}".format(3 * qy + i % 3, 3 * qx + i / 3) for i in range(9)]))
+        values = filter(None, [self.grid[3 * qy + i % 3][3 * qx + i / 3].get_value() for i in range(9)])
         if len(values) != len(set(values)):
-          self.log.append("grid {},{} invalid: {}".format(qx, qy, str(values)))
+          #self.log.append("grid {},{} invalid: {}".format(qy, qx, str(sorted(values))))
           return False
-    self.log.append('valid')
+    #self.log.append('valid')
     return True
 
   def build_rows(self):
@@ -208,7 +232,7 @@ class Sudoku:
     i = 0
     height, width = self.stdscr.getmaxyx()
     while 12 + i < height and len(self.log) > i:
-      self.stdscr.addstr(12 + i, 9 * 9, str(self.log[-1 - i]))
+      self.stdscr.addstr(12 + i, 9 * 9, str(self.log[-1 - i]) + " " * 10)
       i += 1
 
     self.stdscr.refresh()
@@ -218,8 +242,6 @@ class Sudoku:
     self._init_colors()
     self.stdscr = stdscr
     self.stdscr.clear()
-    self.cursor_x = 0
-    self.cursor_y = 0
     self.draw_board()
     self.draw_small = False
 
@@ -249,6 +271,16 @@ class Sudoku:
         self.stdscr.clear()
       elif key == 'a':
         self.solve()
+      elif key == 'A':
+        self.stdscr.nodelay(True)
+        key = -1
+        while not self.is_solved() and key == -1:
+          key = self.stdscr.getch()
+          self.solve()
+          self.draw_board()
+        self.stdscr.nodelay(False)
+      elif key == 'R':
+        self.load_game(self.original_state)
 
       self.cursor_x = self.cursor_x % 9
       self.cursor_y = self.cursor_y % 9
@@ -403,6 +435,8 @@ if __name__ == "__main__":
       curses.wrapper(s.newgame)
     finally:
       print "\n".join(s.log)
-    if s.is_solved():
-      print "You won!"
+      print s.original_state
+      print s.current_state()
+      if s.is_solved():
+        print "You won!"
 
