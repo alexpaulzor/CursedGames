@@ -11,9 +11,18 @@ class Sudoku:
     self.grid = [ [ Square(row, col) for col in range(9) ] for row in range(9) ]
     self.sets = set()
     self.draw_small = False
+    self.log = list(reversed([
+      "Commands:",
+      "Arrow keys: move",
+      "1-9: toggle number",
+      "c: clear",
+      "s: toggle small board",
+      "a: autosolve"
+    ]))
     self.build_rows()
     self.build_columns()
     self.build_sectors()
+
 
   def load_game(self, line):
     """
@@ -41,12 +50,70 @@ class Sudoku:
           return False
     return True
 
-  def flush(self, steps=1):
-    for s in self.sets:
-      steps = s.flush(steps)
-    for row in self.grid:
-      for square in row:
-        steps = square.flush(steps)
+  def solve(self):
+    y = 0
+    x = 0
+    while y < 9 and x < 9:
+      square = self.grid[y][x]
+      self.log.append("solving {}".format(square))
+      go_forward = True
+      if square.is_given:
+        if self.check_solution():
+          go_forward = True
+        else:
+          go_forward = False
+      else:
+        if not square.get_value():
+          square.set_value(1)
+        while go_forward and not self.check_solution():
+          if square.get_value() == 9:
+            square.clear()
+            go_forward = False
+          else:
+            square.set_value(square.get_value() + 1)
+
+      if go_forward :
+        # advance
+        if x == 8:
+          y += 1
+          x = 0
+        else:
+          x += 1
+      else:
+        # go back
+        if x > 0:
+          x -= 1
+        elif y > 0:
+          y -= 1
+          x = 8
+        else:
+          # back at 0,0
+          pass
+      self.draw_board()
+
+
+  def check_solution(self):
+    for y in range(9):
+      # check column y
+      values = filter(None, [self.grid[y][i].get_value() for i in range(9)])
+      if len(values) != len(set(values)):
+        self.log.append("column {} invalid: {}".format(y, str(values)))
+        return False
+      for x in range(9):
+        # check row
+        values = filter(None, [self.grid[i][x].get_value() for i in range(9)])
+        if len(values) != len(set(values)):
+          self.log.append("row {} invalid: {}".format(x, str(values)))
+          return False
+    # check 3x3 grids
+    for qy in range(3):
+      for qx in range(3):
+        values = filter(None, [self.grid[qy + i % 3][qx + i / 3].get_value() for i in range(9)])
+        if len(values) != len(set(values)):
+          self.log.append("grid {},{} invalid: {}".format(qx, qy, str(values)))
+          return False
+    self.log.append('valid')
+    return True
 
   def build_rows(self):
     for y in range(9):
@@ -71,59 +138,17 @@ class Sudoku:
             sector.add_square(self.grid[y][x])
         self.sets.add(sector)
 
-  # def print_board(self):
-  #   for s in self.sets:
-  #     print s
-  #     for sq in s.squares:
-  #       print "  {}".format(sq)
-  #   horiz_sep =       "#-------+-------+-------#-------+-------+-------#-------+-------+-------#"
-  #   major_horiz_sep = "#=======+=======+=======#=======+=======+=======#=======+=======+=======#"
-  #   board = [major_horiz_sep]
-  #   for y in range(9):
-  #     lines = ["# " for l in range(3)]
-  #     for x in range(9):
-  #       square = self.grid[y][x]
-  #       for i in range(1, 10):
-  #         if i in square.possible_values:
-  #         #if i == square.get_value():
-  #           lines[(i-1) / 3] += "{} ".format(i)
-  #         else:
-  #           lines[(i-1) / 3] += "  "
-  #       for l in range(3):
-  #         if (x+1) % 3 == 0:
-  #           lines[l] += '# '
-  #         else:
-  #           lines[l] += '| '
-  #     board += lines
-  #     if (y+1) % 3 == 0:
-  #       board += [major_horiz_sep]
-  #     else:
-  #       board += [horiz_sep]
-  #   print "\n".join(board)
-
-  # def print_small_board(self):
-  #   horiz_sep = "+-+-+-+-+-+-+-+-+-+"
-  #   board = [horiz_sep]
-  #   for y in range(9):
-  #     line = "|"
-  #     for x in range(9):
-  #       square = self.grid[y][x]
-  #       if square.get_value():
-  #         line += "{}".format(square.get_value())
-  #       else:
-  #         line += " "
-  #       line += '|'
-  #     board += [line]
-  #     board += [horiz_sep]
-  #   print "\n".join(board)
-
-
   def draw_board(self):
     if self.draw_small:
-      return self.draw_small_board()
-    horiz_sep =       "#-------+-------+-------#-------+-------+-------#-------+-------+-------#"
-    major_horiz_sep = "#=======+=======+=======#=======+=======+=======#=======+=======+=======#"
-    blank_line      = "#       |       |       #       |       |       #       |       |       #"
+      horiz_sep =       "#---+---+---#---+---+---#---+---+---#"
+      major_horiz_sep = "#===+===+===#===+===+===#===+===+===#"
+      blank_line      = "#   |   |   #   |   |   #   |   |   #"
+      value_width = 3
+    else:
+      horiz_sep =       "#-------+-------+-------#-------+-------+-------#-------+-------+-------#"
+      major_horiz_sep = "#=======+=======+=======#=======+=======+=======#=======+=======+=======#"
+      blank_line      = "#       |       |       #       |       |       #       |       |       #"
+      value_width = 7
     liney = 0
     self.stdscr.addstr(liney, 0, major_horiz_sep)
     liney += 1
@@ -131,24 +156,33 @@ class Sudoku:
     conflicts = selected_square.conflict_squares()
     for y in range(9):
       linex = 0
-      for line in range(3):
+      for line in range(1 if self.draw_small else 3):
         self.stdscr.addstr(liney, 0, blank_line)
         linex = 1
         for x in range(9):
           square = self.grid[y][x]
 
           if self.cursor_x == x and self.cursor_y == y:
-            self.stdscr.addstr(liney, linex, "       ", curses.color_pair(10))
+            self.stdscr.addstr(liney, linex, " " * value_width, curses.color_pair(10))
           elif not selected_square.is_unknown() and square in conflicts:
-            self.stdscr.addstr(liney, linex, "       ", curses.color_pair(13))
+            self.stdscr.addstr(liney, linex, " " * value_width, curses.color_pair(13))
           elif square.get_value() and selected_square.get_value() == square.get_value():
-            self.stdscr.addstr(liney, linex, "       ", curses.color_pair(12))
-          for i in range(line * 3 + 1, line * 3 + 4):
-            if i in square.possible_values and not square.is_unknown():
-              attributes = curses.A_UNDERLINE if square.is_given else 0
+            self.stdscr.addstr(liney, linex, " " * value_width, curses.color_pair(12))
+          if self.draw_small:
+            rng = [square.get_value()]
+          else:
+            rng = range(line * 3 + 1, line * 3 + 4)
+          for i in rng:
+            attributes = curses.A_UNDERLINE if square.is_given else 0
+            if i and (i == square.get_value() or (not self.draw_small and
+                i in square.possible_values and not square.is_unknown())):
+
               self.stdscr.addstr(liney, linex + 1, "{}".format(i), curses.color_pair(i)|attributes)
-            linex += 2
+            if not self.draw_small:
+              linex += 2
           linex += 2
+          if self.draw_small:
+              linex += 2
         liney += 1
 
       if (y+1) % 3 == 0:
@@ -171,59 +205,14 @@ class Sudoku:
                          ": {}         ".format(value_counts[i]),
                          curses.color_pair(12 if value_counts[i] == 9 else 0))
 
-    self.stdscr.refresh()
-
-
-  def draw_small_board(self):
-    horiz_sep =       "#---+---+---#---+---+---#---+---+---#"
-    major_horiz_sep = "#===+===+===#===+===+===#===+===+===#"
-    blank_line      = "#   |   |   #   |   |   #   |   |   #"
-    liney = 0
-    self.stdscr.addstr(liney, 0, major_horiz_sep)
-    liney += 1
-    selected_square = self.grid[self.cursor_y][self.cursor_x]
-    conflicts = selected_square.conflict_squares()
-    for y in range(9):
-      linex = 0
-      self.stdscr.addstr(liney, 0, blank_line)
-      linex = 1
-      for x in range(9):
-        square = self.grid[y][x]
-
-        if self.cursor_x == x and self.cursor_y == y:
-          self.stdscr.addstr(liney, linex, "   ", curses.color_pair(10))
-        elif not selected_square.is_unknown() and square in conflicts:
-          self.stdscr.addstr(liney, linex, "   ", curses.color_pair(13))
-        elif square.get_value() and selected_square.get_value() == square.get_value():
-          self.stdscr.addstr(liney, linex, "   ", curses.color_pair(12))
-        i = square.get_value()
-        if i:
-          attributes = curses.A_UNDERLINE if square.is_given else 0
-          self.stdscr.addstr(liney, linex + 1, "{}".format(i), curses.color_pair(i)|attributes)
-        linex += 4
-      liney += 1
-
-      if (y+1) % 3 == 0:
-        self.stdscr.addstr(liney, 0, major_horiz_sep)
-      else:
-        self.stdscr.addstr(liney, 0, horiz_sep)
-      liney += 1
-
-    value_counts = {i: 0 for i in range(1, 10)}
-    for row in self.grid:
-      for sq in row:
-        v = sq.get_value()
-        if v is not None:
-          value_counts[v] += 1
-
-    for i in range(1, 10):
-      self.stdscr.addstr(i, 9 * 9, str(i), curses.color_pair(i))
-      self.stdscr.addstr(i,
-                         9 * 9 + 1,
-                         ": {}         ".format(value_counts[i]),
-                         curses.color_pair(12 if value_counts[i] == 9 else 0))
+    i = 0
+    height, width = self.stdscr.getmaxyx()
+    while 12 + i < height and len(self.log) > i:
+      self.stdscr.addstr(12 + i, 9 * 9, str(self.log[-1 - i]))
+      i += 1
 
     self.stdscr.refresh()
+
 
   def newgame(self, stdscr):
     self._init_colors()
@@ -237,7 +226,11 @@ class Sudoku:
     key = None
     while key != 'q' and not self.is_solved():
 
-      key = self.stdscr.getkey()
+      try:
+        key = self.stdscr.getkey()
+      except:
+        # screen was resized or something
+        key = None
 
       if (key == 'KEY_LEFT' or key == 'h'):
         self.cursor_x -= 1
@@ -251,13 +244,11 @@ class Sudoku:
         self.grid[self.cursor_y][self.cursor_x].toggle_mark(int(key))
       elif key == 'c':
         self.grid[self.cursor_y][self.cursor_x].clear()
-      # elif key == 't':
-      #   self.grid[self.cursor_y][self.cursor_x].flush(1)
       elif key == 's':
         self.draw_small = not self.draw_small
         self.stdscr.clear()
-      # elif key == 's':
-      #   self.flush(1)
+      elif key == 'a':
+        self.solve()
 
       self.cursor_x = self.cursor_x % 9
       self.cursor_y = self.cursor_y % 9
@@ -350,15 +341,6 @@ class Square(Solvable):
     self.possible_values = set([value])
     self.changed = True
 
-  # def rule_out_values(self, values):
-  #   if self.is_solved():
-  #     return False
-  #   if any(values & self.possible_values):
-  #     self.possible_values -= values
-  #     self.changed = True
-  #     return True
-  #   return False
-
   def toggle_mark(self, value):
     if self.is_given:
       return
@@ -412,86 +394,15 @@ class ExclusiveSet(Solvable):
   def __repr__(self):
     return "{}: {}".format(self.name, self.known_values())
 
-  # def try_solve(self):
-  #   known_values = self.known_values()
-  #   known_values.discard(None)
-  #   self.eliminate_known_values(known_values)
-  #   self._eliminate_subsets()
-  #   self._infer_values()
-
-  #   return False
-
-  # def eliminate_known_values(self, known_values):
-  #   for s in self.squares:
-  #     if not s.is_solved():
-  #       s.rule_out_values(known_values)
-
-  # def _eliminate_subsets(self):
-  #   """Find groups within a set of size n (usually 2 or 3) that all
-  #   share the same <= n possible values.
-  #   Subtract those values from all other squares in the set
-  #   """
-  #   # keys: string of ordered digits in possible_values
-  #   # values: set of squares
-  #   subsets = defaultdict(set)
-  #   for sq in self.squares:
-  #     if not sq.is_solved():
-  #       key = ''.join(map(str, sorted(sq.possible_values)))
-  #       subsets[key].add(sq)
-
-  #   for key in subsets:
-  #     for sq in self.squares:
-  #       if sq.possible_values <= set(map(int, key)):
-  #         subsets[key].add(sq)
-
-  #   for key in subsets:
-  #     # If there are as many equivalently unknown hosts as unknowns,
-  #     # exclude that set from the rest
-  #     if len(key) == len(subsets[key]):
-  #       for sq in self.squares - subsets[key]:
-  #         sq.rule_out_values(set(map(int, key)))
-
-  # def _infer_values(self):
-  #   squares_for_value = {i: filter(lambda sq: i in sq.possible_values, self.squares) for i in range(1, 10)}
-  #   for i in squares_for_value:
-  #     if len(squares_for_value[i]) == 1:
-  #       squares_for_value[i][0].set_value(i)
-
-
-    #     for v in s.possible_values:
-    #       possible_values[v].add(s)
-
-    # possible_values = {i: set() for i in (set(range(1, 10)) - known_values)}
-
-    # for v in possible_values:
-    #   if len(possible_values[v]) == 1:
-    #     tuple(possible_values[v])[0].set_value(v)
-
-    # for pset in possible_sets:
-    #   for s in self.squares:
-    #     if s.possible_values <= set(map(int, pset)):
-    #       possible_sets[pset].add(s)
-
-    # for pset in possible_sets:
-    #   # If there are as many equivalently unknown hosts as unknowns,
-    #   # exclude that set from the rest
-    #   if len(pset) == len(possible_sets[pset]):
-    #     for s in self.squares - possible_sets[pset]:
-    #       s.rule_out_values(set(map(int, pset)))
-
-
-
-
-    # return False
-
-
-
 
 if __name__ == "__main__":
   if len(sys.argv) == 2:
     s = Sudoku()
     s.load_game(sys.argv[1])
-    curses.wrapper(s.newgame)
+    try:
+      curses.wrapper(s.newgame)
+    finally:
+      print "\n".join(s.log)
     if s.is_solved():
       print "You won!"
 
