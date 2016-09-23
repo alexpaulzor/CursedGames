@@ -4,13 +4,14 @@ import curses
 import random
 
 class Maze:
-    STRAIGHT_BIAS = 0.3
+    STRAIGHT_BIAS = 0.2
 
     board = {}
 
     def __init__(self, width, height):
         self.width = width
         self.height = height
+        self.solution = []
         self.newboard(width, height)
         curses.wrapper(self.newgame)
         print self.retval
@@ -50,6 +51,7 @@ class Maze:
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
         curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_RED)
         curses.init_pair(3, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_GREEN)
         self.stdscr = stdscr
         self.stdscr.clear()
         self.printwholeboard()
@@ -76,6 +78,8 @@ class Maze:
                 neighbor = self.board[self.current_square.y + 1][self.current_square.x]
                 self.current_square = neighbor
                 self.visit_neighbors(self.current_square)
+            elif key == 's':
+                self.solve()
             if self.haswon():
                 self.retval = "You win!"
                 return
@@ -105,7 +109,7 @@ class Maze:
                 color = 1
                 if square == self.current_square:
                     color = 2
-                elif square == self.exit_square:
+                elif square == self.exit_square or square.in_solution:
                     color = 3
                 show_right = False
                 show_down = False
@@ -146,7 +150,7 @@ class Maze:
                     strtext = "  "
                 self.stdscr.addstr(y, x * 2, strtext[0], curses.color_pair(color))
                 self.stdscr.addstr(y, x * 2 + 1, strtext[1], curses.color_pair(color))
-    
+
     def printwholeboard(self):
         for y in self.board:
             for x in self.board[y]:
@@ -154,7 +158,7 @@ class Maze:
                 color = 1
                 if square == self.current_square:
                     color = 2
-                elif square == self.exit_square:
+                elif square == self.exit_square or square.in_solution:
                     color = 3
                 if square.down_wall and square.right_wall:
                     strtext = "_|"
@@ -166,7 +170,7 @@ class Maze:
                     strtext = "  "
                 self.stdscr.addstr(y, x * 2, strtext[0], curses.color_pair(color))
                 self.stdscr.addstr(y, x * 2 + 1, strtext[1], curses.color_pair(color))
-    
+
     def outputboard(self):
         print
         print "Current: %s" % self.current_square
@@ -193,10 +197,6 @@ class Maze:
             print line
         print
 
-
-
-
-
     def newboard(self, width, height):
         self.board = {}
 
@@ -214,22 +214,20 @@ class Maze:
         else:
             self.exit_square = self.board[rand.randint(0, height - 1)][width - 1]
             self.exit_square.right_wall = False
-       
+
         # direction is [y, x]. This is to introduce a slight bias to make the maze with straighter corridors
         if rand.randint(0, 1) == 0:
             direction = [0, 1]
         else:
             direction = [1, 0]
         self.explore_neighbors(self.enter_square, direction)
-        
+
         self.current_square = self.enter_square
         self.current_square.visited = True
 
     def explore_neighbors(self, square, direction):
         """
             Explore unvisited neighbors in random order
-            
-            
         """
         square.visited = True
         self.current_square = square
@@ -242,7 +240,7 @@ class Maze:
             nbrs.append(self.board[square.y + 1][square.x])
         if square.x < self.width - 1:
             nbrs.append(self.board[square.y][square.x + 1])
-        
+
         rand = random.Random()
         rand.shuffle(nbrs)
 
@@ -260,6 +258,39 @@ class Maze:
                 square.destroy_wall(nbr)
                 self.explore_neighbors(nbr, [nbr.y - square.y, nbr.x - square.x])
 
+    def solve(self):
+        self.solve_step(self.current_square)
+
+    def solve_step(self, square):
+        nbrs = []
+        self.current_square = square
+        square.in_solution = True
+        self.visit_neighbors(self.current_square)
+        self.printboard()
+        self.stdscr.refresh()
+        if self.haswon():
+            return
+        if square.x < self.width - 1 and not square.right_wall:
+            nbrs.append(self.board[square.y][square.x + 1])
+        if square.y < self.height - 1 and not square.down_wall:
+            nbrs.append(self.board[square.y + 1][square.x])
+        if square.x > 0 and not self.board[square.y][square.x - 1].right_wall:
+            nbrs.append(self.board[square.y][square.x - 1])
+        if square.y > 0 and not self.board[square.y - 1][square.x].down_wall:
+            nbrs.append(self.board[square.y - 1][square.x])
+
+        for nbr in nbrs:
+            if nbr.in_solution is None:
+                self.solve_step(nbr)
+                self.printboard()
+                self.stdscr.refresh()
+                if self.haswon():
+                    return
+
+        square.in_solution = False
+        self.current_square = square
+        self.printboard()
+        self.stdscr.refresh()
 
 class Square:
     def __init__(self, x, y):
@@ -268,7 +299,9 @@ class Square:
         self.right_wall = True
         self.down_wall = True
         self.visible = False
+        #self.visible = True
         self.visited = False
+        self.in_solution = None
 
     def destroy_wall(self, other):
         #print "Destroying wall %s, %s" % (self, other)
