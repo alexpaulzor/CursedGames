@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 
 import curses
@@ -19,7 +18,10 @@ class Sudoku:
       "s: toggle small board",
       "a: autosolve step",
       "A: autosolve until key press",
-      "R: reset board"
+      "R: reset board",
+      "f: fill in possible values",
+      "F: fill in all possible values (board)",
+      "w: write current state"
     ]))
     self.cursor_x = 0
     self.cursor_y = 0
@@ -36,6 +38,7 @@ class Sudoku:
     if len(line) != 81:
       print "Invalid line!"
       sys.exit(1)
+    self.clues = 0
 
     for y in range(9):
       for x in range(9):
@@ -43,9 +46,11 @@ class Sudoku:
         if char != "." and char != " ":
           val = int(char)
           self.grid[y][x].set_value(val, True)
+          self.clues += 1
         else:
           self.grid[y][x].clear()
     self.original_state = line
+    self.steps = 0
 
   def current_state(self):
     # return the state of the board as would be loaded
@@ -71,6 +76,7 @@ class Sudoku:
 
   def solve(self, steps=1):
     while self.cursor_y < 9 and self.cursor_x < 9 and steps > 0:
+      self.steps += 1
       steps -= 1
       square = self.grid[self.cursor_y][self.cursor_x]
       #self.log.append("{} solving {}".format(self.go_forward, square))
@@ -174,14 +180,14 @@ class Sudoku:
       blank_line      = "#       |       |       #       |       |       #       |       |       #"
       value_width = 7
     liney = 0
-    self.stdscr.addstr(liney, 0, major_horiz_sep)
+    self.stdscr.addstr(liney, 0, major_horiz_sep, curses.A_DIM)
     liney += 1
     selected_square = self.grid[self.cursor_y][self.cursor_x]
     conflicts = selected_square.conflict_squares()
     for y in range(9):
       linex = 0
       for line in range(1 if self.draw_small else 3):
-        self.stdscr.addstr(liney, 0, blank_line)
+        self.stdscr.addstr(liney, 0, blank_line, curses.A_DIM)
         linex = 1
         for x in range(9):
           square = self.grid[y][x]
@@ -210,9 +216,9 @@ class Sudoku:
         liney += 1
 
       if (y+1) % 3 == 0:
-        self.stdscr.addstr(liney, 0, major_horiz_sep)
+        self.stdscr.addstr(liney, 0, major_horiz_sep, curses.A_DIM)
       else:
-        self.stdscr.addstr(liney, 0, horiz_sep)
+        self.stdscr.addstr(liney, 0, horiz_sep, curses.A_DIM)
       liney += 1
 
     value_counts = {i: 0 for i in range(1, 10)}
@@ -228,6 +234,7 @@ class Sudoku:
                          9 * 9 + 1,
                          ": {}         ".format(value_counts[i]),
                          curses.color_pair(12 if value_counts[i] == 9 else 0))
+    self.stdscr.addstr(10, 9 * 9, "Steps: {}".format(self.steps))
 
     i = 0
     height, width = self.stdscr.getmaxyx()
@@ -250,6 +257,7 @@ class Sudoku:
 
       try:
         key = self.stdscr.getkey()
+        self.steps += 1
       except:
         # screen was resized or something
         key = None
@@ -263,6 +271,8 @@ class Sudoku:
       elif (key == 'KEY_DOWN' or key == 'j'):
         self.cursor_y += 1
       elif key in map(str, range(1, 10)):
+        if self.draw_small:
+          self.grid[self.cursor_y][self.cursor_x].clear()
         self.grid[self.cursor_y][self.cursor_x].toggle_mark(int(key))
       elif key == 'c':
         self.grid[self.cursor_y][self.cursor_x].clear()
@@ -276,11 +286,19 @@ class Sudoku:
         key = -1
         while not self.is_solved() and key == -1:
           key = self.stdscr.getch()
-          self.solve()
+          self.solve(200)
           self.draw_board()
         self.stdscr.nodelay(False)
       elif key == 'R':
         self.load_game(self.original_state)
+      elif key == 'f':
+        self.grid[self.cursor_y][self.cursor_x].infer_values()
+      elif key == 'F':
+        for row in self.grid:
+          for square in row:
+            square.infer_values()
+      elif key == 'w':
+        self.log.append(self.current_state())
 
       self.cursor_x = self.cursor_x % 9
       self.cursor_y = self.cursor_y % 9
@@ -371,7 +389,6 @@ class Square(Solvable):
     if given is not None:
       self.is_given = given
     self.possible_values = set([value])
-    self.changed = True
 
   def toggle_mark(self, value):
     if self.is_given:
@@ -381,9 +398,10 @@ class Square(Solvable):
       return
     if value in self.possible_values:
       self.possible_values.remove(value)
+      if not any(self.possible_values):
+        self.clear()
     else:
       self.possible_values.add(value)
-      self.changed = True
 
   def conflict_squares(self):
     sqs = set()
@@ -396,8 +414,16 @@ class Square(Solvable):
             sqs.add(square)
           elif self.get_value() and self.get_value() in square.possible_values:
             sqs.add(square)
-
     return sqs
+
+  def infer_values(self):
+    if self.get_value():
+      return
+    self.clear()
+    for notify in self.notifies:
+      for square in notify.squares:
+        if square != self and square.get_value() in self.possible_values:
+          self.possible_values.remove(square.get_value())
 
   def __repr__(self):
     return "{}: {}->{}".format(self.name, self.possible_values, self.get_value())
@@ -439,4 +465,6 @@ if __name__ == "__main__":
       print s.current_state()
       if s.is_solved():
         print "You won!"
+      print "({} clues, {} steps)".format(s.clues, s.steps)
+
 
