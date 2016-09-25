@@ -14,7 +14,16 @@ class Sudoku:
     self.grid = [ [ Square(row, col) for col in range(9) ] for row in range(9) ]
     self.sets = set()
     self.draw_small = False
-    self.log = list(reversed([
+    self.log = []
+    self.cursor_x = 0
+    self.cursor_y = 0
+    self.go_forward = True
+    self.build_rows()
+    self.build_columns()
+    self.build_sectors()
+
+  def help(self):
+    self.log += list(reversed([
       "Commands:",
       "Arrow keys: move",
       "1-9: toggle number",
@@ -25,15 +34,10 @@ class Sudoku:
       "R: reset board",
       "f: fill in possible values",
       "F: fill in all possible values (board)",
-      "w: write current state"
+      "w: write current state",
+      "g: generate board (sloooow)"
     ]))
-    self.cursor_x = 0
-    self.cursor_y = 0
-    self.go_forward = True
-    self.build_rows()
-    self.build_columns()
-    self.build_sectors()
-
+    self.draw_board()
 
   def load_game(self, line):
     """
@@ -76,53 +80,65 @@ class Sudoku:
       self.log.append("Cannot solve! " + self.current_state())
       return
     givens = list(solution)
-    all_squares = list(itertools.chain.from_iterable(self.grid))
-    shuffle(all_squares)
+    all_squares = reduce(lambda l, row: l + row, self.grid, [])
+    #shuffle(all_squares)
     self.load_game(''.join(givens))
     self.draw_board()
-    sq = None
-    while True:
+    sq = all_squares.pop()
+    key = -1
+    while key == -1:
       # Pick a random square that is not uncertain
-      sq = None
-      while any(all_squares) and (not sq or sq.is_given or not sq.get_value()):
+      while any(all_squares) and (sq.is_given or not sq.get_value()):
         sq = all_squares.pop()
-      if not sq:
+      if sq.is_given or not sq.get_value():
+        self.log.append('No more squares to try')
         break
-      self.log.append(str(sq))
       self.cursor_x = sq.x
       self.cursor_y = sq.y
-      sq = self.grid[self.cursor_y][self.cursor_x]
-      self.log.append(str(sq))
       sq_val = sq.get_value()
       sq.prevent_value(sq_val)
+      self.log.append('generate trying without: ' + str(sq))
       self.draw_board()
-      self.select_next_square()
-      new_solution = self.compute_solution()
+      givens[9 * sq.y + sq.x] = '.'
+      givens[81 + 9 * sq.y + sq.x] = '.'
+      self.stdscr.nodelay(True)
+      key = self.stdscr.getch()
+      new_solution = self.compute_solution(''.join(givens[81:]))
+
       sq.prevent_value(None)
+
       if new_solution and new_solution != solution:
         # can't remove this square, since it's unsolvable or solvable another
         # way without it
-        sq.set_value(sq_val)
+        sq.set_value(sq_val, True)
+        givens[9 * sq.y + sq.x] = str(sq_val)
+        givens[81 + 9 * sq.y + sq.x] = str(sq_val)
       else:
         # can remove this square
         self.log.append("removing {}".format(sq))
-        #self.log.append(givens)
-        givens[9 * sq.y + sq.x] = '.'
-        givens[81 + 9 * sq.y + sq.x] = '.'
+        # #self.log.append(givens)
+        # givens[9 * sq.y + sq.x] = '.'
+        # givens[81 + 9 * sq.y + sq.x] = '.'
         #self.log.append(givens)
       self.load_game(''.join(givens))
     self.load_game(''.join(givens))
+    self.stdscr.nodelay(False)
     self.draw_board()
 
-  def compute_solution(self):
-    state = self.current_state()
+  def compute_solution(self, initial_state=None):
+    backup_state = self.current_state()
+    direction = self.go_forward
+    if initial_state is not None:
+      self.load_game(initial_state)
+    self.go_forward = True
     self.solve(None)
     if self.is_solved():
       solution = self.current_state()
       self.draw_board()
     else:
       solution = None
-    self.load_game(state)
+    self.load_game(backup_state)
+    self.go_forward = direction
     return solution
 
   def current_state(self, givens_only=False):
@@ -158,18 +174,22 @@ class Sudoku:
     return True
 
   def solve(self, steps=1):
-    self.select_prev_square()
     end_square = self.grid[self.cursor_y][self.cursor_x]
-    self.select_next_square()
-    square = self.grid[self.cursor_y][self.cursor_x]
-    self.log.append("solving {} from {}: ".format(square, end_square, self.current_state()))
-    while (steps is None or steps > 0) and not self.is_solved() and \
-         (square != end_square or any(end_square.value_attempts)):
+    while end_square.is_given:
+      self.select_prev_square()
+      end_square = self.grid[self.cursor_y][self.cursor_x]
+    end_square.clear()
+    end_square.reset_values_to_attempt()
+    square = end_square
+    self.log.append("s {} {} from {}: {}".format(self.go_forward, square, end_square, self.current_state()))
+    key = -1
+    while key == -1 and (steps is None or steps > 0) and not self.is_solved() and any(end_square.value_attempts):
+      self.stdscr.nodelay(True)
+      key = self.stdscr.getch()
       self.steps += 1
       if steps:
         steps -= 1
 
-      #self.log.append("solving {} from {}: ".format(square, end_square, self.current_state()))
       if not square.is_given:
         if not square.get_value() and any(square.value_attempts):
           square.clear()
@@ -190,15 +210,16 @@ class Sudoku:
         self.select_next_square()
       else:
         square.clear()
-        square.reset_values_to_attempt()
-        self.select_prev_square()
+        if square != end_square:
+          square.reset_values_to_attempt()
+          self.select_prev_square()
 
-      if self.steps % 1000 == 0:
+      if self.steps % 10000 == 0:
+        self.log.append("s {} {} from {}: {}".format(self.go_forward, square, end_square, self.current_state()))
         self.draw_board()
 
       square = self.grid[self.cursor_y][self.cursor_x]
-      if end_square.is_given and not square.is_given:
-        end_square = square
+    self.stdscr.nodelay(False)
 
   def select_next_square(self):
     # advance
@@ -342,7 +363,10 @@ class Sudoku:
     i = 0
     height, width = self.stdscr.getmaxyx()
     while 12 + i < height - 1 and len(self.log) > i:
-      self.stdscr.addstr(12 + i, 9 * 9, str(self.log[-1 - i])[:(width - 9 * 9)])
+      line = str(self.log[-1 - i])
+      if len(line) < width - 9 * 9:
+        line += ' ' * (width - 9 * 9 - len(line))
+      self.stdscr.addstr(12 + i, 9 * 9, line[:(width - 9 * 9)])
       i += 1
 
     self.stdscr.refresh()
@@ -354,6 +378,7 @@ class Sudoku:
     self.stdscr.clear()
     self.draw_board()
     self.draw_small = False
+    self.help()
 
     key = None
     while key != 'q' and not self.is_solved():
@@ -385,13 +410,7 @@ class Sudoku:
       elif key == 'a':
         self.solve()
       elif key == 'A':
-        self.stdscr.nodelay(True)
-        key = -1
-        while not self.is_solved() and key == -1:
-          key = self.stdscr.getch()
-          self.solve(200)
-          self.draw_board()
-        self.stdscr.nodelay(False)
+        self.solve(None)
       elif key == 'R':
         self.load_game(self.original_state)
         self.load_game(self.current_state(True))
@@ -405,6 +424,8 @@ class Sudoku:
         self.log.append(self.current_state())
       elif key == 'g':  # generate
         self.generate()
+      elif key == 'H':
+        self.help()
 
       self.cursor_x = self.cursor_x % 9
       self.cursor_y = self.cursor_y % 9

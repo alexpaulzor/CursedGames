@@ -136,7 +136,7 @@ class Square(object):
           self.possible_values.remove(square.get_value())
 
   def __repr__(self):
-    return "{}: {}->{}".format(self.name, self.possible_values, self.get_value())
+    return "{}: ={} !{} ?{}".format(self.name, self.get_value(), self.prevented_value, self.value_attempts)
 
 class ExclusiveSet(object):
   """A collection of exactly 9 squares"""
