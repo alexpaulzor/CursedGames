@@ -1,39 +1,3 @@
-# class Solvable(object):
-#   """Solvable handles the notification of dependent exclusivity sets.
-#   """
-
-#   def is_solved(self):
-#     """Override to compute if the requirement is satisfied"""
-#     return True
-
-#   def try_solve(self):
-#     """Override me"""
-#     pass
-
-#   def __init__(self):
-#     self.notifies = set()
-#     self.solved = False
-#     self.visited = False
-#     self.changed = False
-
-#   def flush(self, steps=1):
-#     if steps <= 0:
-#       return 0
-#     self.try_solve()
-#     if self.solved != self.is_solved():
-#       self.changed = True
-#       self.solved = self.is_solved()
-
-#     if self.changed:
-#       self.changed = False
-#       for solvable in self.notifies:
-#         steps = solvable.flush(steps - 1)
-#     return steps
-
-#   def add_notify(self, solvable):
-#     if solvable not in self.notifies:
-#       self.notifies.add(solvable)
-#       solvable.add_notify(self)
 import sys
 from random import shuffle, randrange
 from collections import defaultdict
@@ -41,11 +5,11 @@ import itertools
 import time
 
 class Square(object):
-  def __init__(self, row, col):
+  def __init__(self, x, y):
     super(Square, self).__init__()
-    self.name = "({},{})".format(row, col)
-    self.x = col
-    self.y = row
+    self.name = "({},{})".format(x, y)
+    self.x = x
+    self.y = y
     self.is_given = False
     self.sets = set()
     self.solved = False
@@ -86,8 +50,13 @@ class Square(object):
     if given is not None:
       self.is_given = given
     self.possible_values = set([value])
-    if self.is_given:
-      self.reset_values_to_attempt()
+    self.reset_values_to_attempt()
+
+  def reset(self):
+    if self.get_value():
+      self.set_value(self.get_value(), False)
+    else:
+      self.clear()
 
   def prevent_value(self, value):
     self.prevented_value = value
