@@ -30,11 +30,11 @@ class Sudoku:
     self.cursor_y = 0
     self.go_forward = True
     self.x_regions = x_regions
+    self.original_state = None
     self.build_rows()
     self.build_columns()
     self.build_sectors()
-    if self.x_regions:
-      self.build_x_regions()
+    self.build_x_regions()
 
   def help(self):
     self.log += list(reversed([
@@ -49,7 +49,10 @@ class Sudoku:
       "f: fill in possible values",
       "F: fill in all possible values (board)",
       "w: write current state",
-      "g: generate board (sloooow)"
+      "g: generate board (sloooow)",
+      "x: toggle x regions",
+      "H: this help",
+      "q: quit"
     ]))
     self.draw_board()
 
@@ -58,13 +61,21 @@ class Sudoku:
       line is an N_4-character representation of the board where given values are 1-9 and spaces are .
       optionally with another N_4 characters representing a solution or partial solution.
     """
+
     if not line:
-      line = '.' * N_4
+      line = 'x' + '.' * N_4
+    if not self.original_state:
+      self.original_state = line
+      self.steps = 0
+    if line[0] == 'x':
+      self.set_x_regions(True)
+      line = line[1:]
+    else:
+      self.set_x_regions(False)
     if len(line) not in (N_4, 2 * N_4):
-      print "Invalid line!"
+      print "Invalid line: " + line
       sys.exit(1)
     self.clues = 0
-    self.log.append('load: ' + line)
     for y in range(N_2):
       for x in range(N_2):
         char = line[y * N_2 + x]
@@ -79,8 +90,8 @@ class Sudoku:
             self.grid[y][x].set_value(val, given=False)
         else:
           self.grid[y][x].clear()
-    self.original_state = line
-    self.steps = 0
+
+    #self.log.append('load {}: {}'.format(self.clues, line))
 
   def generate(self, clues=20):
     # generate a game
@@ -93,10 +104,18 @@ class Sudoku:
     if not solution:
       self.log.append("Cannot solve! " + self.current_state())
       return
+
+    def given_str(givens):
+      return ('x' if self.x_regions else '') + ''.join(givens)
+
     givens = list(solution)
+    if self.x_regions:
+      givens = givens[1:]
     all_squares = reduce(lambda l, row: l + row, self.grid, [])
     shuffle(all_squares)
-    self.load_game(''.join(givens))
+
+    self.load_game(given_str(givens))
+    self.log.append("complete: " + solution)
     self.draw_board()
     sq = all_squares.pop()
     key = -1
@@ -105,45 +124,45 @@ class Sudoku:
       while any(all_squares) and (sq.is_given or not sq.get_value()):
         sq = all_squares.pop()
       if sq.is_given or not sq.get_value():
-        self.log.append('No more squares to try')
+        self.log.append('Done! No more squares to try')
+        self.log.append(given_str(givens[:81]))
         break
       self.cursor_x = sq.x
       self.cursor_y = sq.y
       sq_val = sq.get_value()
       sq.prevent_value(sq_val)
-      self.log.append('generate trying without: ' + str(sq))
+      self.log.append('[{}] generate trying without: {}'.format(len(all_squares), str(sq)))
       self.draw_board()
       givens[N_2 * sq.y + sq.x] = '.'
       givens[81 + 9 * sq.y + sq.x] = '.'
       self.stdscr.nodelay(True)
       key = self.stdscr.getch()
-      new_solution = self.compute_solution(''.join(givens[81:]))
+      new_solution = self.compute_solution(given_str(givens))
 
       sq.prevent_value(None)
 
       if new_solution and new_solution != solution:
         # can't remove this square, since it's unsolvable or solvable another
         # way without it
+        self.log.append("keeping {}".format(sq))
         sq.set_value(sq_val, True)
         givens[N_2 * sq.y + sq.x] = str(sq_val)
         givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
       else:
         # can remove this square
         self.log.append("removing {}".format(sq))
-        # #self.log.append(givens)
-        # givens[N_2 * sq.y + sq.x] = '.'
-        # givens[81 + N_2 * sq.y + sq.x] = '.'
-        #self.log.append(givens)
-      self.load_game(''.join(givens))
-    self.load_game(''.join(givens))
+      self.load_game(given_str(givens))
+    self.load_game(given_str(givens))
     self.stdscr.nodelay(False)
     self.draw_board()
 
   def compute_solution(self, initial_state=None):
     backup_state = self.current_state()
-    direction = self.go_forward
+    backup_steps = self.steps
+    backup_direction = self.go_forward
     if initial_state is not None:
       self.load_game(initial_state)
+      self.steps = 0
     self.go_forward = True
     self.solve(None)
     if self.is_solved():
@@ -152,30 +171,29 @@ class Sudoku:
     else:
       solution = None
     self.load_game(backup_state)
-    self.go_forward = direction
+    self.go_forward = backup_direction
+    self.steps = backup_steps
     return solution
 
   def current_state(self, givens_only=False):
     # return the state of the board as would be loaded
-    line = ''
-    for y in range(N_2):
-      for x in range(N_2):
-        sq = self.grid[y][x]
-        if sq.get_value() and sq.is_given:
-          line += str(sq.get_value())
-        else:
-          line += '.'
-    if givens_only:
-      return line
+    line = 'x' if self.x_regions else ''
+    line2 = ''
     for y in range(N_2):
       for x in range(N_2):
         sq = self.grid[y][x]
         if sq.get_value():
-          line += str(sq.get_value())
+          if sq.is_given:
+            line += str(sq.get_value())
+          else:
+            line += '.'
+          line2 += str(sq.get_value())
         else:
           line += '.'
-    #self.log.append('snapshot: ' + line)
-    return line
+          line2 += '.'
+    if givens_only:
+      return line
+    return line + line2
 
   def is_solved(self):
     for s in self.sets:
@@ -188,16 +206,21 @@ class Sudoku:
     return True
 
   def solve(self, steps=1):
-    end_square = self.grid[self.cursor_y][self.cursor_x]
-    while end_square.is_given:
+    start_square = self.grid[self.cursor_y][self.cursor_x]
+    while start_square.is_given:
       self.select_prev_square()
-      end_square = self.grid[self.cursor_y][self.cursor_x]
-    end_square.clear()
-    end_square.reset_values_to_attempt()
-    square = end_square
-    self.log.append("s {} {} from {}: {}".format(self.go_forward, square, end_square, self.current_state()))
+      start_square = self.grid[self.cursor_y][self.cursor_x]
+    start_square.clear()
+    start_square.reset_values_to_attempt()
+    square = start_square
+
+    def status(start_square, square):
+      return "solve {} {} at {}: {}".format('>' if self.go_forward else '<', start_square, square, self.current_state())
+
+    self.log.append(status(start_square, square))
+
     key = -1
-    while key == -1 and (steps is None or steps > 0) and not self.is_solved() and any(end_square.value_attempts):
+    while key == -1 and (steps is None or steps > 0) and not self.is_solved() and any(start_square.value_attempts):
       self.stdscr.nodelay(True)
       key = self.stdscr.getch()
       self.steps += 1
@@ -213,8 +236,7 @@ class Sudoku:
           if any(square.value_attempts):
             square.set_value(square.value_attempts.pop())
             self.go_forward = True
-        while self.go_forward and not self.check_solution():
-          #self.log.append("{} solving {}".format(self.go_forward, square))
+        while self.go_forward and (square.conflict_squares() or not self.check_solution()):
           if not any(square.value_attempts):
             self.go_forward = False
           else:
@@ -224,16 +246,18 @@ class Sudoku:
         self.select_next_square()
       else:
         square.clear()
-        if square != end_square:
+        if square != start_square:
           square.reset_values_to_attempt()
           self.select_prev_square()
 
-      if self.steps % 10000 == 0:
-        self.log.append("s {} {} from {}: {}".format(self.go_forward, square, end_square, self.current_state()))
+      if self.steps % 5000 == 0:
+        self.log[-1] = status(start_square, square)
         self.draw_board()
 
       square = self.grid[self.cursor_y][self.cursor_x]
     self.stdscr.nodelay(False)
+    if not self.is_solved() and not any(start_square.value_attempts):
+      self.log.append("Unsolvable!")
 
   def select_next_square(self):
     # advance
@@ -313,14 +337,13 @@ class Sudoku:
         self.sets.add(sector)
 
   def build_x_regions(self):
-    down = ExclusiveSet('x_down')
-    up = ExclusiveSet('x_up')
+    self.x_down = ExclusiveSet('x_down', enabled=self.x_regions)
+    self.x_up = ExclusiveSet('x_up', enabled=self.x_regions)
     for x in range(N_2):
-      print x
-      down.add_square(self.grid[x][x])
-      up.add_square(self.grid[N_2 - 1 - x][x])
-    self.sets.add(down)
-    self.sets.add(up)
+      self.x_down.add_square(self.grid[x][x])
+      self.x_up.add_square(self.grid[N_2 - 1 - x][x])
+    self.sets.add(self.x_down)
+    self.sets.add(self.x_up)
 
   def draw_board(self):
     # TODO: build line blanks dynamically based on N
@@ -343,7 +366,6 @@ class Sudoku:
       linex = 0
       for line in range(1 if self.draw_small else N):
         self.stdscr.addstr(liney, 0, blank_line, curses.A_DIM)
-
 
         linex = 1
         for x in range(N_2):
@@ -418,7 +440,7 @@ class Sudoku:
     self.help()
 
     key = None
-    while key != 'q' and not self.is_solved():
+    while key != 'q':
 
       try:
         key = self.stdscr.getkey()
@@ -449,6 +471,7 @@ class Sudoku:
       elif key == 'A':
         self.solve(None)
       elif key == 'R':
+        self.log.append('resetting from: ' + self.current_state())
         self.load_game(self.original_state)
         self.load_game(self.current_state(True))
       elif key == 'f':
@@ -463,12 +486,20 @@ class Sudoku:
         self.generate()
       elif key == 'H':
         self.help()
+      elif key == 'x':
+        self.set_x_regions(not self.x_regions)
 
       self.cursor_x = self.cursor_x % N_2
       self.cursor_y = self.cursor_y % N_2
+      if self.is_solved():
+        self.log.append("You won!")
       self.draw_board()
     self.draw_board()
-    time.sleep(3)
+
+  def set_x_regions(self, enable_x_regions):
+    self.x_regions = enable_x_regions
+    self.x_down.set_enabled(self.x_regions)
+    self.x_up.set_enabled(self.x_regions)
 
   def _init_colors(self):
     curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
@@ -483,15 +514,17 @@ class Sudoku:
     curses.init_pair(COLOR_SELECTED, curses.COLOR_WHITE, curses.COLOR_GREEN)
     curses.init_pair(COLOR_SAME, curses.COLOR_BLACK, curses.COLOR_CYAN)
     curses.init_pair(COLOR_CONFLICT, curses.COLOR_BLACK, curses.COLOR_RED)
-    curses.init_pair(COLOR_X, curses.COLOR_WHITE, curses.COLOR_YELLOW)
+    curses.init_pair(COLOR_X, curses.COLOR_WHITE, curses.COLOR_BLUE)
 
 
 if __name__ == "__main__":
-  s = Sudoku(True)
+  s = Sudoku(False)
   game = sys.argv[1] if len(sys.argv) == 2 else None
   s.load_game(game)
   try:
     curses.wrapper(s.newgame)
+  except Exception as e:
+    print repr(e)
   finally:
     print "\n".join(s.log)
     print s.original_state

@@ -54,6 +54,9 @@ class Square(object):
     self.prevent_value(None)
     self.clear()
 
+  def add_set(self, set):
+    self.sets.add(set)
+
   def clear(self):
     if not self.is_given:
       self.possible_values = set(range(1, 10))
@@ -136,23 +139,30 @@ class Square(object):
           self.possible_values.remove(square.get_value())
 
   def __repr__(self):
-    return "{}: ={} !{} ?{}".format(self.name, self.get_value(), self.prevented_value, self.value_attempts)
+    return "{}: {}{} !{} ?{}".format(self.name, '=' if self.is_given else '?',
+      self.get_value(), self.prevented_value, self.value_attempts)
 
 class ExclusiveSet(object):
   """A collection of exactly 9 squares"""
-  def __init__(self, name):
+  def __init__(self, name, enabled=True):
     super(ExclusiveSet, self).__init__()
     self.name = name
     self.squares = set()
     self.solved = False
     self.visited = False
     self.changed = False
+    self.enabled = enabled
+
+  def set_enabled(self, enabled):
+    self.enabled = enabled
 
   def known_values(self):
+    if not self.enabled:
+      return set()
     return set(map(lambda s: s.get_value(), self.squares))
 
   def is_solved(self):
-    if self.solved:
+    if self.solved or not self.enabled:
       return True
     known_values = self.known_values()
     if len(known_values) == len(self.squares) and None not in known_values:
@@ -166,6 +176,7 @@ class ExclusiveSet(object):
 
   def add_square(self, square):
     self.squares.add(square)
+    square.add_set(self)
 
   def __repr__(self):
     return "{}: {}".format(self.name, self.known_values())
