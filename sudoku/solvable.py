@@ -11,6 +11,7 @@ class Square(object):
     self.x = x
     self.y = y
     self.is_given = False
+    self._value = None
     self.sets = set()
     self.solved = False
     self.visited = False
@@ -24,6 +25,7 @@ class Square(object):
   def clear(self):
     if not self.is_given:
       self.possible_values = set(range(1, 10))
+      self._value = None
 
   def is_solved(self):
     return len(self.possible_values) == 1
@@ -39,24 +41,17 @@ class Square(object):
     self.visited = False
 
   def is_unknown(self):
-    return len(self.possible_values) == 9
+    return not self._value and len(self.possible_values) == 9
 
   def get_value(self):
-    if not self.is_solved():
-      return None
-    return tuple(self.possible_values)[0]
+    return self._value
 
   def set_value(self, value, given=None):
     if given is not None:
       self.is_given = given
+    self._value = value
     self.possible_values = set([value])
-    self.reset_values_to_attempt()
-
-  def reset(self):
-    if self.get_value():
-      self.set_value(self.get_value(), False)
-    else:
-      self.clear()
+    #self.reset_values_to_attempt()
 
   def prevent_value(self, value):
     self.prevented_value = value
@@ -72,6 +67,13 @@ class Square(object):
       self.value_attempts.remove(self.prevented_value)
     shuffle(self.value_attempts)
 
+  def reset(self):
+    if self.get_value():
+      self.set_value(self.get_value(), self.is_given)
+    else:
+      self.clear()
+    self.reset_values_to_attempt()
+
   def toggle_mark(self, value):
     if self.is_given:
       return
@@ -84,6 +86,10 @@ class Square(object):
         self.clear()
     else:
       self.possible_values.add(value)
+    if len(self.possible_values) == 1:
+      self._value = tuple(self.possible_values)[0]
+    else:
+      self._value = None
 
   def conflict_squares(self):
     sqs = set()
