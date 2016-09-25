@@ -98,7 +98,7 @@ class Square(object):
     self.value_attempts = range(1, 10)
     if self.prevented_value in self.value_attempts:
       self.value_attempts.remove(self.prevented_value)
-    #shuffle(self.value_attempts)
+    shuffle(self.value_attempts)
 
   def toggle_mark(self, value):
     if self.is_given:
