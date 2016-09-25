@@ -3,7 +3,11 @@
 import curses
 
 import sys
+from random import shuffle, randrange
 from collections import defaultdict
+import itertools
+import time
+from solvable import Square, ExclusiveSet
 
 class Sudoku:
   def __init__(self):
@@ -34,27 +38,105 @@ class Sudoku:
   def load_game(self, line):
     """
       line is an 81-character representation of the board where given values are 1-9 and spaces are .
+      optionally with another 81 characters representing a solution or partial solution.
     """
-    if len(line) != 81:
+    if not line:
+      line = '.' * 81
+    if len(line) not in (81, 2 * 81):
       print "Invalid line!"
       sys.exit(1)
     self.clues = 0
-
+    self.log.append('load: ' + line)
     for y in range(9):
       for x in range(9):
         char = line[y * 9 + x]
         if char != "." and char != " ":
           val = int(char)
-          self.grid[y][x].set_value(val, True)
+          self.grid[y][x].set_value(val, given=True)
           self.clues += 1
+        elif len(line) == 2 * 81:
+          char = line[81 + y * 9 + x]
+          if char != "." and char != " ":
+            val = int(char)
+            self.grid[y][x].set_value(val, given=False)
         else:
           self.grid[y][x].clear()
     self.original_state = line
     self.steps = 0
 
-  def current_state(self):
+  def generate(self, clues=20):
+    # generate a game
+
+    # clear the board
+    # self.load_game(None)
+
+    # solve
+    solution = self.compute_solution()
+    if not solution:
+      self.log.append("Cannot solve! " + self.current_state())
+      return
+    givens = list(solution)
+    all_squares = list(itertools.chain.from_iterable(self.grid))
+    shuffle(all_squares)
+    self.load_game(''.join(givens))
+    self.draw_board()
+    sq = None
+    while True:
+      # Pick a random square that is not uncertain
+      sq = None
+      while any(all_squares) and (not sq or sq.is_given or not sq.get_value()):
+        sq = all_squares.pop()
+      if not sq:
+        break
+      self.log.append(str(sq))
+      self.cursor_x = sq.x
+      self.cursor_y = sq.y
+      sq = self.grid[self.cursor_y][self.cursor_x]
+      self.log.append(str(sq))
+      sq_val = sq.get_value()
+      sq.prevent_value(sq_val)
+      self.draw_board()
+      self.select_next_square()
+      new_solution = self.compute_solution()
+      sq.prevent_value(None)
+      if new_solution and new_solution != solution:
+        # can't remove this square, since it's unsolvable or solvable another
+        # way without it
+        sq.set_value(sq_val)
+      else:
+        # can remove this square
+        self.log.append("removing {}".format(sq))
+        #self.log.append(givens)
+        givens[9 * sq.y + sq.x] = '.'
+        givens[81 + 9 * sq.y + sq.x] = '.'
+        #self.log.append(givens)
+      self.load_game(''.join(givens))
+    self.load_game(''.join(givens))
+    self.draw_board()
+
+  def compute_solution(self):
+    state = self.current_state()
+    self.solve(None)
+    if self.is_solved():
+      solution = self.current_state()
+      self.draw_board()
+    else:
+      solution = None
+    self.load_game(state)
+    return solution
+
+  def current_state(self, givens_only=False):
     # return the state of the board as would be loaded
     line = ''
+    for y in range(9):
+      for x in range(9):
+        sq = self.grid[y][x]
+        if sq.get_value() and sq.is_given:
+          line += str(sq.get_value())
+        else:
+          line += '.'
+    if givens_only:
+      return line
     for y in range(9):
       for x in range(9):
         sq = self.grid[y][x]
@@ -62,6 +144,7 @@ class Sudoku:
           line += str(sq.get_value())
         else:
           line += '.'
+    #self.log.append('snapshot: ' + line)
     return line
 
   def is_solved(self):
@@ -75,50 +158,70 @@ class Sudoku:
     return True
 
   def solve(self, steps=1):
-    while self.cursor_y < 9 and self.cursor_x < 9 and steps > 0:
+    self.select_prev_square()
+    end_square = self.grid[self.cursor_y][self.cursor_x]
+    self.select_next_square()
+    square = self.grid[self.cursor_y][self.cursor_x]
+    self.log.append("solving {} from {}: ".format(square, end_square, self.current_state()))
+    while (steps is None or steps > 0) and not self.is_solved() and \
+         (square != end_square or any(end_square.value_attempts)):
       self.steps += 1
-      steps -= 1
-      square = self.grid[self.cursor_y][self.cursor_x]
-      #self.log.append("{} solving {}".format(self.go_forward, square))
+      if steps:
+        steps -= 1
+
+      #self.log.append("solving {} from {}: ".format(square, end_square, self.current_state()))
       if not square.is_given:
-        if not square.get_value():
-          square.set_value(1)
+        if not square.get_value() and any(square.value_attempts):
+          square.clear()
+          square.set_value(square.value_attempts.pop())
           self.go_forward = True
         if not self.go_forward:
-          if square.get_value() < 9:
-            square.set_value(square.get_value() + 1)
+          if any(square.value_attempts):
+            square.set_value(square.value_attempts.pop())
             self.go_forward = True
-          else:
-            square.clear()
         while self.go_forward and not self.check_solution():
           #self.log.append("{} solving {}".format(self.go_forward, square))
-          if square.get_value() == 9:
-            square.clear()
+          if not any(square.value_attempts):
             self.go_forward = False
           else:
-            square.set_value(square.get_value() + 1)
+            square.set_value(square.value_attempts.pop())
 
       if self.go_forward:
-        # advance
-        if self.cursor_x == 8:
-          self.cursor_y += 1
-          self.cursor_x = 0
-          if self.cursor_y == 9:
-            self.cursor_y = 0
-        else:
-          self.cursor_x += 1
+        self.select_next_square()
       else:
-        # go back
-        if self.cursor_x > 0:
-          self.cursor_x -= 1
-        elif self.cursor_y > 0:
-          self.cursor_y -= 1
-          self.cursor_x = 8
-        else:
-          # back at 0,0
-          #self.go_forward = True
-          self.cursor_x = 8
-          self.cursor_y = 8
+        square.clear()
+        square.reset_values_to_attempt()
+        self.select_prev_square()
+
+      if self.steps % 1000 == 0:
+        self.draw_board()
+
+      square = self.grid[self.cursor_y][self.cursor_x]
+      if end_square.is_given and not square.is_given:
+        end_square = square
+
+  def select_next_square(self):
+    # advance
+    if self.cursor_x == 8:
+      self.cursor_y += 1
+      self.cursor_x = 0
+      if self.cursor_y == 9:
+        self.cursor_y = 0
+    else:
+      self.cursor_x += 1
+    #self.draw_board()
+
+  def select_prev_square(self):
+    # go back
+    if self.cursor_x > 0:
+      self.cursor_x -= 1
+    elif self.cursor_y > 0:
+      self.cursor_y -= 1
+      self.cursor_x = 8
+    else:
+      # back at 0,0
+      self.cursor_x = 8
+      self.cursor_y = 8
 
 
   def check_solution(self):
@@ -238,8 +341,8 @@ class Sudoku:
 
     i = 0
     height, width = self.stdscr.getmaxyx()
-    while 12 + i < height and len(self.log) > i:
-      self.stdscr.addstr(12 + i, 9 * 9, str(self.log[-1 - i]) + " " * 10)
+    while 12 + i < height - 1 and len(self.log) > i:
+      self.stdscr.addstr(12 + i, 9 * 9, str(self.log[-1 - i])[:(width - 9 * 9)])
       i += 1
 
     self.stdscr.refresh()
@@ -291,19 +394,23 @@ class Sudoku:
         self.stdscr.nodelay(False)
       elif key == 'R':
         self.load_game(self.original_state)
+        self.load_game(self.current_state(True))
       elif key == 'f':
         self.grid[self.cursor_y][self.cursor_x].infer_values()
       elif key == 'F':
         for row in self.grid:
           for square in row:
             square.infer_values()
-      elif key == 'w':
+      elif key == 'w':  # write
         self.log.append(self.current_state())
+      elif key == 'g':  # generate
+        self.generate()
 
       self.cursor_x = self.cursor_x % 9
       self.cursor_y = self.cursor_y % 9
       self.draw_board()
     self.draw_board()
+    time.sleep(3)
 
   def _init_colors(self):
     curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
@@ -320,151 +427,19 @@ class Sudoku:
     curses.init_pair(12, curses.COLOR_BLACK, curses.COLOR_CYAN)
     curses.init_pair(13, curses.COLOR_BLACK, curses.COLOR_RED)
 
-class Solvable(object):
-  """Solvable handles the notification of dependent exclusivity sets.
-  """
-
-  def is_solved(self):
-    """Override to compute if the requirement is satisfied"""
-    return True
-
-  def try_solve(self):
-    """Override me"""
-    pass
-
-  def __init__(self):
-    self.notifies = set()
-    self.solved = False
-    self.visited = False
-    self.changed = False
-
-  def flush(self, steps=1):
-    if steps <= 0:
-      return 0
-    self.try_solve()
-    if self.solved != self.is_solved():
-      self.changed = True
-      self.solved = self.is_solved()
-
-    if self.changed:
-      self.changed = False
-      for solvable in self.notifies:
-        steps = solvable.flush(steps - 1)
-    return steps
-
-  def add_notify(self, solvable):
-    if solvable not in self.notifies:
-      self.notifies.add(solvable)
-      solvable.add_notify(self)
-
-
-class Square(Solvable):
-  def __init__(self, row, col):
-    super(Square, self).__init__()
-    self.name = "({},{})".format(row, col)
-    self.is_given = False
-    self.possible_values = set(range(1, 10))
-
-  def clear(self):
-    if not self.is_given:
-      self.possible_values = set(range(1, 10))
-      self.changed = True
-
-  def is_solved(self):
-    return len(self.possible_values) == 1
-
-  def try_solve(self):
-    for n in self.notifies:
-      n.try_solve()
-
-  def is_unknown(self):
-    return len(self.possible_values) == 9
-
-  def get_value(self):
-    if not self.is_solved():
-      return None
-    return tuple(self.possible_values)[0]
-
-  def set_value(self, value, given=None):
-    if given is not None:
-      self.is_given = given
-    self.possible_values = set([value])
-
-  def toggle_mark(self, value):
-    if self.is_given:
-      return
-    if self.is_unknown():
-      self.set_value(value)
-      return
-    if value in self.possible_values:
-      self.possible_values.remove(value)
-      if not any(self.possible_values):
-        self.clear()
-    else:
-      self.possible_values.add(value)
-
-  def conflict_squares(self):
-    sqs = set()
-    if self.is_unknown():
-      return sqs
-    for notify in self.notifies:
-      for square in notify.squares:
-        if not square.is_unknown() and square != self:
-          if square.get_value() and square.get_value() in self.possible_values:
-            sqs.add(square)
-          elif self.get_value() and self.get_value() in square.possible_values:
-            sqs.add(square)
-    return sqs
-
-  def infer_values(self):
-    if self.get_value():
-      return
-    self.clear()
-    for notify in self.notifies:
-      for square in notify.squares:
-        if square != self and square.get_value() in self.possible_values:
-          self.possible_values.remove(square.get_value())
-
-  def __repr__(self):
-    return "{}: {}->{}".format(self.name, self.possible_values, self.get_value())
-
-class ExclusiveSet(Solvable):
-  """A collection of exactly 9 squares"""
-  def __init__(self, name):
-    super(ExclusiveSet, self).__init__()
-    self.name = name
-    self.squares = set()
-
-  def known_values(self):
-    return set(map(lambda s: s.get_value(), self.squares))
-
-  def is_solved(self):
-    if self.solved:
-      return True
-    known_values = self.known_values()
-    if len(known_values) == len(self.squares) and None not in known_values:
-      return True
-
-  def add_square(self, square):
-    self.squares.add(square)
-    self.add_notify(square)
-
-  def __repr__(self):
-    return "{}: {}".format(self.name, self.known_values())
-
 
 if __name__ == "__main__":
-  if len(sys.argv) == 2:
-    s = Sudoku()
-    s.load_game(sys.argv[1])
-    try:
-      curses.wrapper(s.newgame)
-    finally:
-      print "\n".join(s.log)
-      print s.original_state
-      print s.current_state()
-      if s.is_solved():
-        print "You won!"
-      print "({} clues, {} steps)".format(s.clues, s.steps)
+  s = Sudoku()
+  game = sys.argv[1] if len(sys.argv) == 2 else None
+  s.load_game(game)
+  try:
+    curses.wrapper(s.newgame)
+  finally:
+    print "\n".join(s.log)
+    print s.original_state
+    print s.current_state()
+    if s.is_solved():
+      print "You won!"
+    print "({} clues, {} steps)".format(s.clues, s.steps)
 
 
