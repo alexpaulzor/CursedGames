@@ -98,9 +98,9 @@ class Sudoku:
 
   def generate(self):
     # generate a game
-    # for row in self.grid:
-    #   for sq in row:
-    #     sq.reset()
+    for row in self.grid:
+      for sq in row:
+        sq.reset()
     solution = self.compute_solution()
     if not solution:
       self.log("Cannot solve!")
@@ -219,13 +219,16 @@ class Sudoku:
     square = start_square
 
     def status(start_square, square):
-      return "solve {} {} at {} ({:.2f}%)".format(
+      start_i = N_2 * start_square.y + start_square.x
+      current_i = N_2 * square.y + square.x
+      pct_complete = ((N_2 - len(start_square.value_attempts)) * 100.0 / N_2 +
+        ((current_i - start_i) % N_4) * 100.0 / N_4 / N_2)
+
+      return "({:.2f}%) solve {} {} at {}".format(
+        pct_complete,
         '>' if self.go_forward else '<',
         start_square,
-        square,
-        (((square.y - start_square.y) % N_2 * N_2 +
-          (square.x - start_square.x) % N_2) * 100.0 / N_4 ) *
-          (N_2 - len(start_square.value_attempts)) / N_2)
+        square)
 
     self.log(status(start_square, square))
 
@@ -234,9 +237,9 @@ class Sudoku:
       self.steps += 1
       if steps:
         steps -= 1
-      self.log(status(start_square, square), replace=False)
+      self.log(status(start_square, square), replace=True)
       if not square.is_given:
-        if not square.get_value() and any(square.value_attempts):
+        if not square.get_value():
           square.clear()
           square.reset_values_to_attempt()
           square.set_value(square.value_attempts.pop())
@@ -246,8 +249,8 @@ class Sudoku:
             square.set_value(square.value_attempts.pop())
             self.go_forward = True
         #while self.go_forward and (square.conflict_squares() or not self.check_solution()):
-        while self.go_forward and not self.check_solution():
-        #while self.go_forward and any(square.conflict_squares()):
+        #while self.go_forward and not self.check_solution():
+        while self.go_forward and any(square.conflict_squares()):
           if not any(square.value_attempts):
             self.go_forward = False
           else:
@@ -256,20 +259,19 @@ class Sudoku:
       if self.go_forward:
         self.select_next_square()
       else:
-        square.clear()
         if square != start_square:
-          square.reset_values_to_attempt()
+          square.clear()
           self.select_prev_square()
 
-      if self.steps % 1000 == 0:
-        self.log(status(start_square, square), replace=False)
+      if self.steps % 5000 == 0:
+        self.log(status(start_square, square), replace=True)
         self.draw_board()
         # self.stdscr.nodelay(True)
         # key = self.stdscr.getch()
 
       square = self.grid[self.cursor_y][self.cursor_x]
     # self.stdscr.nodelay(False)
-    self.log(status(start_square, square), replace=False)
+    self.log(status(start_square, square), replace=True)
     self.log(self.current_state())
     if not self.is_solved():
       if not any(start_square.value_attempts):
@@ -305,7 +307,7 @@ class Sudoku:
 
 
   def check_solution(self):
-    self.log("c " + self.current_state())
+    #self.log("c " + self.current_state())
     for y in range(N_2):
       # check column y
       values = filter(None, [self.grid[y][i].get_value() for i in range(N_2)])
@@ -333,7 +335,7 @@ class Sudoku:
         return False
       if len(up_values) != len(set(up_values)):
         return False
-    self.log('valid')
+    #self.log('valid')
     return True
 
   def build_rows(self):
@@ -494,7 +496,7 @@ class Sudoku:
       elif key == 'A':
         self.solve(None)
       elif key == 'R':
-        self.log(current_state())
+        self.log(self.current_state())
         self.log('resetting from:')
         self.load_game(self.original_state)
         self.load_game(self.current_state(True))

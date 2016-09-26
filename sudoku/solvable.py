@@ -69,7 +69,7 @@ class Square(object):
 
   def reset(self):
     if self.get_value():
-      self.set_value(self.get_value(), self.is_given)
+      self.set_value(self.get_value(), False)
     else:
       self.clear()
     self.reset_values_to_attempt()
