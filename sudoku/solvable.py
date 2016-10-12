@@ -19,8 +19,8 @@ class Square(object):
     self.prevent_value(None)
     self.clear()
 
-  def add_set(self, set):
-    self.sets.add(set)
+  def add_set(self, s):
+    self.sets.add(s)
 
   def clear(self):
     if not self.is_given:
@@ -36,6 +36,8 @@ class Square(object):
     self.visited = True
     self.infer_values()
     for s in self.sets:
+      if not s.enabled:
+        continue
       s.try_solve()
     self.infer_values()
     self.visited = False
@@ -96,6 +98,8 @@ class Square(object):
     if self.is_unknown():
       return sqs
     for s in self.sets:
+      if not s.enabled:
+        continue
       for square in s.squares:
         if not square.is_unknown() and square != self:
           if square.get_value() and square.get_value() in self.possible_values:
@@ -109,9 +113,13 @@ class Square(object):
       return
     self.clear()
     for s in self.sets:
+      if not s.enabled:
+        continue
       for square in s.squares:
         if square != self and square.get_value() in self.possible_values:
           self.possible_values.remove(square.get_value())
+    if len(self.possible_values) == 1:
+      self.set_value(list(self.possible_values)[0])
 
   def __repr__(self):
     return "{}: {}{} !{} ?{}".format(self.name, '=' if self.is_given else '?',
