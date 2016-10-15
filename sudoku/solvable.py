@@ -53,7 +53,6 @@ class Square(object):
       self.is_given = given
     self._value = value
     self.possible_values = set([value])
-    #self.reset_values_to_attempt()
 
   def prevent_value(self, value):
     self.prevented_value = value
@@ -64,10 +63,15 @@ class Square(object):
     if self.is_given:
       self.value_attempts = []
       return
-    self.value_attempts = range(1, 10)
+    all_values = set(range(1, 10))
+    probable_values = self._inferred_possible_values()
+    improbable_values = list(all_values - probable_values)
+    probable_values = list(probable_values)
+    shuffle(probable_values)
+    shuffle(improbable_values)
+    self.value_attempts = probable_values + improbable_values
     if self.prevented_value in self.value_attempts:
       self.value_attempts.remove(self.prevented_value)
-    shuffle(self.value_attempts)
 
   def reset(self):
     if self.get_value():
@@ -104,22 +108,27 @@ class Square(object):
         if not square.is_unknown() and square != self:
           if square.get_value() and square.get_value() in self.possible_values:
             sqs.add(square)
-          elif self.get_value() and self.get_value() in square.possible_values:
-            sqs.add(square)
+          # elif self.get_value() and self.get_value() in square.possible_values:
+          #   sqs.add(square)
     return sqs
 
   def infer_values(self):
     if self.get_value():
       return
     self.clear()
+    self.possible_values = self._inferred_possible_values()
+    if len(self.possible_values) == 1:
+      self.set_value(list(self.possible_values)[0])
+
+  def _inferred_possible_values(self):
+    possible_values = set(range(1, 10))
     for s in self.sets:
       if not s.enabled:
         continue
       for square in s.squares:
-        if square != self and square.get_value() in self.possible_values:
-          self.possible_values.remove(square.get_value())
-    if len(self.possible_values) == 1:
-      self.set_value(list(self.possible_values)[0])
+        if square != self and square.get_value() in possible_values:
+          possible_values.remove(square.get_value())
+    return possible_values
 
   def __repr__(self):
     return "{}: {}{} !{} ?{}".format(self.name, '=' if self.is_given else '?',

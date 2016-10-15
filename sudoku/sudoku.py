@@ -8,6 +8,7 @@ from collections import defaultdict
 import itertools
 import time
 from solvable import Square, ExclusiveSet
+import time
 
 N = 3
 N_2 = N * N
@@ -22,6 +23,7 @@ COLOR_X = 11
 
 class Sudoku:
   def __init__(self, x_regions=False):
+    self.start_time = time.clock()
     self.grid = [ [ Square(x, y) for x in range(N_2) ] for y in range(N_2) ]
     self.sets = set()
     self.draw_small = False
@@ -31,6 +33,7 @@ class Sudoku:
     self.go_forward = True
     self.x_regions = x_regions
     self.original_state = None
+    self.saved_state = None
     self.build_rows()
     self.build_columns()
     self.build_sectors()
@@ -48,7 +51,8 @@ class Sudoku:
       "R: reset board",
       "f: fill in possible values",
       "F: fill in all possible values (board)",
-      "w: write current state",
+      "w: save (write) current state",
+      "o: open last saved state",
       "g: generate board (sloooow)",
       "x: toggle x regions",
       "H: this help",
@@ -91,10 +95,12 @@ class Sudoku:
         self.grid[y][x].reset_values_to_attempt()
 
   def log(self, message, replace=False):
+    dt = time.clock() - self.start_time
+    message = '[{:02d}:{:02d}] {}'.format(int(dt / 60), int(dt % 60), str(message))
     if replace:
-      self._log[-1] = "+{} ".format(self.steps) + str(message)
+      self._log[-1] = message
     else:
-      self._log.append(str(message))
+      self._log.append(message)
 
   def generate(self):
     # generate a game
@@ -167,8 +173,7 @@ class Sudoku:
     if initial_state is not None:
       self.load_game(initial_state)
       self.steps = 0
-    self.log(self.current_state())
-    self.log("solving from:")
+    self.log("solving from: " + self.current_state())
     self.go_forward = True
     solution = self.solve(None)
     self.load_game(backup_state)
@@ -221,17 +226,20 @@ class Sudoku:
     def status(start_square, square):
       start_i = N_2 * start_square.y + start_square.x
       current_i = N_2 * square.y + square.x
+      # I have no idea how I came up with this as the percent complete,
+      # but it gives satisfyingish numbers to give you hope as it crunches
+      # the solution
       pct_complete = ((N_2 - len(start_square.value_attempts)) * 100.0 / N_2 +
         ((current_i - start_i) % N_4) * 100.0 / N_4 / N_2)
 
-      return "({:.2f}%) solve {} {} at {}".format(
+      return "(~{:.2f}%) solve {} {} at {}".format(
         pct_complete,
         '>' if self.go_forward else '<',
         start_square,
         square)
 
     self.log(status(start_square, square))
-
+    self.stdscr.nodelay(True)
     key = -1
     while key == -1 and (steps is None or steps > 0) and not self.is_solved() and any(start_square.value_attempts):
       self.steps += 1
@@ -248,8 +256,6 @@ class Sudoku:
           if any(square.value_attempts):
             square.set_value(square.value_attempts.pop())
             self.go_forward = True
-        #while self.go_forward and (square.conflict_squares() or not self.check_solution()):
-        #while self.go_forward and not self.check_solution():
         while self.go_forward and any(square.conflict_squares()):
           if not any(square.value_attempts):
             self.go_forward = False
@@ -266,21 +272,22 @@ class Sudoku:
       if self.steps % 5000 == 0:
         self.log(status(start_square, square), replace=True)
         self.draw_board()
-        # self.stdscr.nodelay(True)
-        # key = self.stdscr.getch()
+        key = self.stdscr.getch()
 
       square = self.grid[self.cursor_y][self.cursor_x]
-    # self.stdscr.nodelay(False)
+    self.stdscr.nodelay(False)
     self.log(status(start_square, square), replace=True)
-    self.log(self.current_state())
-    if not self.is_solved():
+
+    if self.is_solved():
+      state = self.current_state()
+      self.log(state)
+      return state
+    else:
       if not any(start_square.value_attempts):
         self.log("Unsolvable!")
         return None
       else:
         return False
-
-    return self.current_state()
 
   def select_next_square(self):
     # advance
@@ -507,7 +514,11 @@ class Sudoku:
           for square in row:
             square.infer_values()
       elif key == 'w':  # write
-        self.log(self.current_state())
+        self.saved_state = self.current_state()
+        self.log(self.saved_state)
+      elif key == 'o':  # open
+        if self.saved_state:
+          self.load_game(self.saved_state)
       elif key == 'g':  # generate
         self.generate()
       elif key == 'H':
