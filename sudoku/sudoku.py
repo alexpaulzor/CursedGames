@@ -18,6 +18,9 @@ COLOR_SAME = 12
 COLOR_CONFLICT = 13
 COLOR_X = 11
 
+MIN_CLUES = 17
+MAX_CLUES = 24
+
 
 class Sudoku:
     def __init__(self, x_regions=False):
@@ -31,14 +34,14 @@ class Sudoku:
         self.go_forward = True
         self.x_regions = x_regions
         self.original_state = None
-        self.saved_state = None
+        self.saved_states = []
         self.build_rows()
         self.build_columns()
         self.build_sectors()
         self.build_x_regions()
 
     def help(self):
-        self._log += list(reversed([
+        self._log += [
             "Commands:",
             "Arrow keys: move",
             "1-9: toggle number",
@@ -50,12 +53,12 @@ class Sudoku:
             "f: fill in possible values",
             "F: fill in all possible values (board)",
             "w: save (write) current state",
-            "o: open last saved state",
+            "u: undo",
             "g: generate board (sloooow)",
             "x: toggle x regions",
             "H: this help",
             "q: quit"
-        ]))
+        ]
         self.draw_board()
 
     def load_game(self, line):
@@ -64,6 +67,8 @@ class Sudoku:
             given values are 1-9 and spaces are .
             optionally with another N_4 characters representing
             a solution or partial solution.
+            The second set of characters can optionally be a bitmask of the sum
+            of 2 ** i for each possible value.
         """
 
         if not line:
@@ -83,13 +88,26 @@ class Sudoku:
         for y in range(N_2):
             for x in range(N_2):
                 char = line[y * N_2 + x]
+                sq = self.grid[y][x]
                 if char != ".":
                     val = int(char)
-                    self.grid[y][x].set_value(val, given=True)
+                    sq.set_value(val, given=True)
                     self.clues += 1
                 elif len(line) == 2 * N_4 and line[N_4 + y * N_2 + x] != '.':
-                    val = int(line[N_4 + y * N_2 + x])
-                    self.grid[y][x].set_value(val, given=False)
+                    c = line[N_4 + y * N_2 + x]
+                    # '1' -> 49, '9' -> 57
+                    val = ord(c)
+                    if 49 <= val and val <= 57:
+                        val = int(c)
+                        sq.set_value(val, given=False)
+                    else:
+                        sq.clear()
+                        for i in sq.possible_values:
+                            if (2 ** i & val) != 2 ** i:
+                                sq.possible_values.remove(i)
+                        if len(sq.possible_values) == 1:
+                            sq.set_value(tuple(sq.possible_values)[0])
+
                 else:
                     self.grid[y][x].clear()
                 self.grid[y][x].reset_values_to_attempt()
@@ -110,8 +128,7 @@ class Sudoku:
                 sq.reset()
         solution = self.compute_solution()
         if not solution:
-            self.log("Cannot solve!")
-            self.log(self.current_state())
+            self.log("Cannot solve! " + self.current_state())
             return
 
         def given_str(givens):
@@ -129,22 +146,20 @@ class Sudoku:
         self.draw_board()
         sq = all_squares.pop()
         key = -1
+        clues = 0
         while key == -1:
             # Pick a random square that is not uncertain
             while any(all_squares) and (sq.is_given or not sq.get_value()):
                 sq = all_squares.pop()
-            if not any(all_squares):
-                self.log('Done! No more squares to try')
-                self.log(given_str(givens[:81]))
-                with open('puzzles/generated.sudoku', 'a') as f:
-                    f.write(given_str(givens[:81]) + '\n')
-                return
+            if not any(all_squares) or len(all_squares) + clues <= MIN_CLUES:
+                key = 0
+                break
             self.cursor_x = sq.x
             self.cursor_y = sq.y
             sq_val = sq.get_value()
             sq.prevent_value(sq_val)
-            self.log('[{}] generate trying without: {}'.format(
-                len(all_squares), str(sq)))
+            self.log('[{} togo / {} clues] generate trying without: {}'.format(
+                len(all_squares), clues, str(sq)))
             self.draw_board()
             givens[N_2 * sq.y + sq.x] = '.'
             givens[81 + 9 * sq.y + sq.x] = '.'
@@ -157,14 +172,29 @@ class Sudoku:
             if new_solution and new_solution != solution:
                 # can't remove this square, since it's unsolvable
                 # or solvable another way without it
-                self.log("keeping {}".format(sq))
+                clues += 1
+                self.log("keeping {} ({} clues)".format(sq, clues))
                 sq.set_value(sq_val, True)
                 givens[N_2 * sq.y + sq.x] = str(sq_val)
                 givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
+
             else:
                 # can remove this square
                 self.log("removing {}".format(sq))
             self.load_game(given_str(givens))
+        self.log('Done! No more squares to try ' + given_str(givens[:81]))
+        if len(all_squares) + clues <= MAX_CLUES:
+            for sq in all_squares:
+                sq_val = sq.get_value()
+                if not sq_val:
+                    continue
+                sq.set_value(sq_val, True)
+                givens[N_2 * sq.y + sq.x] = str(sq_val)
+                givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
+                clues += 1
+            self.log('saving with {} clues'.format(clues))
+            with open('puzzles/generated.sudoku', 'a') as f:
+                f.write(given_str(givens[:81]) + '\n')
         self.load_game(given_str(givens))
         self.draw_board()
 
@@ -185,8 +215,8 @@ class Sudoku:
 
     def current_state(self, givens_only=False):
         # return the state of the board as would be loaded
-        line = 'x' if self.x_regions else ''
-        line2 = ''
+        line = u'x' if self.x_regions else u''
+        line2 = u''
         for y in range(N_2):
             for x in range(N_2):
                 sq = self.grid[y][x]
@@ -198,7 +228,13 @@ class Sudoku:
                     line2 += str(sq.get_value())
                 else:
                     line += '.'
-                    line2 += '.'
+                    if sq.is_unknown():
+                        line2 += '.'
+                    else:
+                        val = 0
+                        for i in sq.possible_values:
+                            val = val | 2 ** i
+                        line += chr(val)
         if givens_only:
             return line
         return line + line2
@@ -218,6 +254,40 @@ class Sudoku:
 
     def solve(self, steps=1):
         start_square = self.grid[self.cursor_y][self.cursor_x]
+        #self.smart_solve()
+        self.bruteforce(start_square, steps=None)
+        if self.is_solved():
+            state = self.current_state()
+            self.log("Solved! " + state)
+            return state
+        else:
+            if not any(start_square.value_attempts):
+                self.log("Unsolvable!")
+                return None
+            else:
+                return False
+
+    def smart_solve(self):
+        prev_state = None
+        while self.current_state() != prev_state:
+            if self.is_solved():
+                return self.current_state()
+            prev_state = self.current_state()
+            for row in self.grid:
+                for sq in row:
+                    sq.infer_values()
+            for s in self.sets:
+                s.try_solve()
+
+    def naked_groups(self):
+        """find groups of 2 or 3 of values in the same set
+        and remove that group from the rest of the squares in that set
+        """
+
+    def hidden_groups(self):
+        """ """
+
+    def bruteforce(self, start_square, steps=1):
         while start_square.is_given:
             self.select_prev_square()
             start_square = self.grid[self.cursor_y][self.cursor_x]
@@ -284,16 +354,6 @@ class Sudoku:
         self.stdscr.nodelay(False)
         self.log(status(start_square, square), replace=True)
 
-        if self.is_solved():
-            state = self.current_state()
-            self.log(state)
-            return state
-        else:
-            if not any(start_square.value_attempts):
-                self.log("Unsolvable!")
-                return None
-            else:
-                return False
 
     def select_next_square(self):
         # advance
@@ -386,7 +446,7 @@ class Sudoku:
         self.sets.add(self.x_down)
         self.sets.add(self.x_up)
 
-    def draw_board(self):
+    def _get_blank_board_strings(self):
         if self.draw_small:
             value_width = 3
         else:
@@ -404,11 +464,34 @@ class Sudoku:
         major_horiz_sep = '#' + major_horiz_sep + '#'
         blank_line = '#' + blank_line + '#'
 
+        return (value_width, horiz_sep, major_horiz_sep, blank_line)
+
+    def _get_square_color(self, square):
+        conflicts = self.selected_square().conflict_squares()
+        if self.cursor_x == square.x and self.cursor_y == square.y:
+            return COLOR_SELECTED
+        elif (not self.selected_square().is_unknown() and
+              square in conflicts):
+            return COLOR_CONFLICT
+        elif (square.get_value() and
+              self.selected_square().get_value() == square.get_value()):
+            return COLOR_SAME
+        elif (self.x_regions and
+              (square.x == square.y or
+               square.x == 9 - 1 - square.y)):
+            return COLOR_X
+        return 0
+
+    def selected_square(self):
+        return self.grid[self.cursor_y][self.cursor_x]
+
+    def draw_board(self):
+        (value_width, horiz_sep,
+         major_horiz_sep, blank_line) = self._get_blank_board_strings()
+
         liney = 0
         self.stdscr.addstr(liney, 0, major_horiz_sep, curses.A_DIM)
         liney += 1
-        selected_square = self.grid[self.cursor_y][self.cursor_x]
-        conflicts = selected_square.conflict_squares()
         for y in range(N_2):
             linex = 0
             for line in range(1 if self.draw_small else N):
@@ -417,19 +500,7 @@ class Sudoku:
                 linex = 1
                 for x in range(N_2):
                     square = self.grid[y][x]
-                    color = 0
-                    if self.cursor_x == x and self.cursor_y == y:
-                        color = COLOR_SELECTED
-                    elif (not selected_square.is_unknown() and
-                          square in conflicts):
-                        color = COLOR_CONFLICT
-                    elif (square.get_value() and
-                          selected_square.get_value() == square.get_value()):
-                        color = COLOR_SAME
-                    elif (self.x_regions and
-                          (square.x == square.y or
-                           square.x == 9 - 1 - square.y)):
-                        color = COLOR_X
+                    color = self._get_square_color(square)
 
                     self.stdscr.addstr(liney, linex, " " * value_width,
                                        curses.color_pair(color))
@@ -463,6 +534,12 @@ class Sudoku:
                 self.stdscr.addstr(liney, 0, horiz_sep, curses.A_DIM)
             liney += 1
 
+        self._draw_value_counts()
+        self._draw_log()
+        self.stdscr.refresh()
+
+    def _draw_value_counts(self):
+
         value_counts = {i: 0 for i in range(1, N_2 + 1)}
         for row in self.grid:
             for sq in row:
@@ -477,16 +554,24 @@ class Sudoku:
                                curses.color_pair(color))
         self.stdscr.addstr(N_2 + 1, N_4, "Steps: {}".format(self.steps))
 
+    def _draw_log(self):
         i = 0
         height, width = self.stdscr.getmaxyx()
-        while N_2 + N + i < height - 1 and len(self._log) > i:
-            line = str(self._log[-1 - i])
+        start_line_num = N_2 + N
+        num_log_lines = height - start_line_num
+
+        if len(self._log) < num_log_lines:
+            num_log_lines = len(self._log)
+            start_line_num = height - num_log_lines
+
+        for i in range(start_line_num, height - 1):
+            line = str(self._log[-(height - i - 1)])
+        #while  < height - 1 and len(self._log) > i:
+            #line = str(self._log[-1 - i])
             if len(line) < width - N_4:
                 line += ' ' * (width - N_4 - len(line))
-            self.stdscr.addstr(N_2 + N + i, N_4, line[:(width - N_4)])
-            i += 1
-
-        self.stdscr.refresh()
+            self.stdscr.addstr(i, N_4, line[:(width - N_4)])
+            #i += 1
 
     def newgame(self, stdscr):
         self._init_colors()
@@ -498,7 +583,6 @@ class Sudoku:
 
         key = None
         while key != 'q':
-
             try:
                 key = self.stdscr.getkey()
                 self.steps += 1
@@ -506,50 +590,7 @@ class Sudoku:
                 # screen was resized or something
                 key = None
 
-            if (key == 'KEY_LEFT' or key == 'h'):
-                self.cursor_x -= 1
-            elif (key == 'KEY_RIGHT' or key == 'l'):
-                self.cursor_x += 1
-            elif (key == 'KEY_UP' or key == 'k'):
-                self.cursor_y -= 1
-            elif (key == 'KEY_DOWN' or key == 'j'):
-                self.cursor_y += 1
-            elif key in map(str, range(1, N_2 + 1)):
-                if self.draw_small:
-                    self.grid[self.cursor_y][self.cursor_x].clear()
-                self.grid[self.cursor_y][self.cursor_x].toggle_mark(int(key))
-            elif key == 'c':
-                self.grid[self.cursor_y][self.cursor_x].clear()
-            elif key == 's':
-                self.draw_small = not self.draw_small
-                self.stdscr.clear()
-            elif key == 'a':
-                self.solve()
-            elif key == 'A':
-                self.solve(None)
-            elif key == 'R':
-                self.log(self.current_state())
-                self.log('resetting from:')
-                self.load_game(self.original_state)
-                self.load_game(self.current_state(True))
-            elif key == 'f':
-                self.grid[self.cursor_y][self.cursor_x].infer_values()
-            elif key == 'F':
-                for row in self.grid:
-                    for square in row:
-                        square.infer_values()
-            elif key == 'w':    # write
-                self.saved_state = self.current_state()
-                self.log(self.saved_state)
-            elif key == 'o':    # open
-                if self.saved_state:
-                    self.load_game(self.saved_state)
-            elif key == 'g':    # generate
-                self.generate()
-            elif key == 'H':
-                self.help()
-            elif key == 'x':
-                self.set_x_regions(not self.x_regions)
+            self._handle_key(key)
 
             self.cursor_x = self.cursor_x % N_2
             self.cursor_y = self.cursor_y % N_2
@@ -557,6 +598,59 @@ class Sudoku:
                 self.log("You won!")
             self.draw_board()
         self.draw_board()
+
+    def _handle_key(self, key):
+        initial_state = self.current_state()
+        if (key == 'KEY_LEFT' or key == 'h'):
+            self.cursor_x -= 1
+        elif (key == 'KEY_RIGHT' or key == 'l'):
+            self.cursor_x += 1
+        elif (key == 'KEY_UP' or key == 'k'):
+            self.cursor_y -= 1
+        elif (key == 'KEY_DOWN' or key == 'j'):
+            self.cursor_y += 1
+        elif key in map(str, range(1, N_2 + 1)):
+            if self.draw_small:
+                self.grid[self.cursor_y][self.cursor_x].clear()
+            self.grid[self.cursor_y][self.cursor_x].toggle_mark(int(key))
+        elif key == 'c':
+            self.grid[self.cursor_y][self.cursor_x].clear()
+        elif key == 's':
+            self.draw_small = not self.draw_small
+            self.stdscr.clear()
+        elif key == 'a':
+            self.smart_solve()
+        elif key == 'A':
+            self.solve(None)
+        elif key == 'R':
+            self.log(self.current_state())
+            self.log('resetting from:')
+            self.load_game(self.original_state)
+            self.load_game(self.current_state(True))
+        elif key == 'f':
+            self.grid[self.cursor_y][self.cursor_x].infer_values()
+        elif key == 'F':
+            for row in self.grid:
+                for square in row:
+                    square.infer_values()
+        elif key == 'w':    # write
+            self.save_state()
+        elif key == 'u':    # open
+            if any(self.saved_states):
+                self.load_game(self.saved_states.pop())
+        elif key == 'g':    # generate
+            self.generate()
+        elif key == 'H':
+            self.help()
+        elif key == 'x':
+            self.set_x_regions(not self.x_regions)
+        if self.current_state() != initial_state:
+            self.save_state(False)
+
+    def save_state(self, log=True):
+        self.saved_states.append(self.current_state())
+        if log:
+            self.log("saved: " + self.saved_states[-1])
 
     def set_x_regions(self, enable_x_regions):
         self.x_regions = enable_x_regions

@@ -163,12 +163,22 @@ class ExclusiveSet(object):
         known_values = self.known_values()
         if len(known_values) == len(self.squares) and None not in known_values:
             return True
+        return False
 
     def try_solve(self):
-        pass
-        # if self.visited:
-        #     return
-        # self.visited = True
+        if not self.enabled or self.is_solved():
+            return
+        known_values = self.known_values()
+        # value -> set(squares possibly that value)
+        possibles = { i: set() for i in range(1, 10) }
+        for sq in self.squares:
+            for v in sq.possible_values:
+                possibles[v].add(sq)
+
+        for v, sqs in possibles.iteritems():
+            if v not in known_values and len(sqs) == 1:
+                sq.set_value(v)
+
 
     def add_square(self, square):
         self.squares.add(square)
