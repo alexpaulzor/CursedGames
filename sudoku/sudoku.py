@@ -67,8 +67,6 @@ class Sudoku:
             given values are 1-9 and spaces are .
             optionally with another N_4 characters representing
             a solution or partial solution.
-            The second set of characters can optionally be a bitmask of the sum
-            of 2 ** i for each possible value.
         """
 
         if not line:
@@ -94,20 +92,8 @@ class Sudoku:
                     sq.set_value(val, given=True)
                     self.clues += 1
                 elif len(line) == 2 * N_4 and line[N_4 + y * N_2 + x] != '.':
-                    c = line[N_4 + y * N_2 + x]
-                    # '1' -> 49, '9' -> 57
-                    val = ord(c)
-                    if 49 <= val and val <= 57:
-                        val = int(c)
-                        sq.set_value(val, given=False)
-                    else:
-                        sq.clear()
-                        for i in sq.possible_values:
-                            if (2 ** i & val) != 2 ** i:
-                                sq.possible_values.remove(i)
-                        if len(sq.possible_values) == 1:
-                            sq.set_value(tuple(sq.possible_values)[0])
-
+                    val = int(line[N_4 + y * N_2 + x])
+                    self.grid[y][x].set_value(val, given=False)
                 else:
                     self.grid[y][x].clear()
                 self.grid[y][x].reset_values_to_attempt()
@@ -215,8 +201,8 @@ class Sudoku:
 
     def current_state(self, givens_only=False):
         # return the state of the board as would be loaded
-        line = u'x' if self.x_regions else u''
-        line2 = u''
+        line = 'x' if self.x_regions else u''
+        line2 = ''
         for y in range(N_2):
             for x in range(N_2):
                 sq = self.grid[y][x]
@@ -228,13 +214,7 @@ class Sudoku:
                     line2 += str(sq.get_value())
                 else:
                     line += '.'
-                    if sq.is_unknown():
-                        line2 += '.'
-                    else:
-                        val = 0
-                        for i in sq.possible_values:
-                            val = val | 2 ** i
-                        line += chr(val)
+                    line2 += '.'
         if givens_only:
             return line
         return line + line2
