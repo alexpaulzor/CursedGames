@@ -35,6 +35,7 @@ class Sudoku:
         self.x_regions = x_regions
         self.original_state = None
         self.saved_states = []
+        self.redo_states = []
         self.build_rows()
         self.build_columns()
         self.build_sectors()
@@ -53,7 +54,9 @@ class Sudoku:
             "f: fill in possible values",
             "F: fill in all possible values (board)",
             "w: save (write) current state",
+            "o: load last save",
             "u: undo",
+            "r: redo",
             "g: generate board (sloooow)",
             "x: toggle x regions",
             "H: this help",
@@ -65,8 +68,16 @@ class Sudoku:
         """
             line is an N_4-character representation of the board where
             given values are 1-9 and spaces are .
-            optionally with another N_4 characters representing
+
+            If the first character is 'x', enable x-regions.
+
+            Optionally with another N_4 characters representing
             a solution or partial solution.
+
+            Optionally after that, another 3*N_4 characters representing
+            a bitmask of 1-shifted possible values as a 3-digit decimal.
+            For instance, a square with possible values 1, 3, and 9 would be
+            2**(1-1) + 2**(3-1) + 2**(9-1) = 261
         """
 
         if not line:
@@ -79,8 +90,10 @@ class Sudoku:
             line = line[1:]
         else:
             self.set_x_regions(False)
-        if len(line) not in (N_4, 2 * N_4):
-            print "Invalid line: " + line
+        if len(line) not in (N_4, 2 * N_4, 5 * N_4):
+            print "Invalid line: {} ({} ch)".format(line, len(line))
+            print ("Lines (excluding preceding extra region chars) "
+                   "must be one of length {}".format((N_4, 2 * N_4, 5 * N_4)))
             sys.exit(1)
         self.clues = 0
         for y in range(N_2):
@@ -94,6 +107,17 @@ class Sudoku:
                 elif len(line) == 2 * N_4 and line[N_4 + y * N_2 + x] != '.':
                     val = int(line[N_4 + y * N_2 + x])
                     self.grid[y][x].set_value(val, given=False)
+                elif len(line) == 5 * N_4:
+                    mask_start = 2 * N_4 + 3 * (y * N_2 + x)
+                    mask_str = line[mask_start:mask_start+3]
+                    if mask_str == '...':
+                        continue
+                    value_mask = int(mask_str)
+                    values = set()
+                    for i in range(N_2):
+                        if 2**i & value_mask == 2**i:
+                            values.add(i + 1)
+                    sq.set_possible_values(values)
                 else:
                     self.grid[y][x].clear()
                 self.grid[y][x].reset_values_to_attempt()
@@ -199,10 +223,17 @@ class Sudoku:
         self.steps += backup_steps
         return solution
 
-    def current_state(self, givens_only=False):
+    def _possible_value_mask(self, sq):
+        mask = 0
+        for i in sq.possible_values:
+            mask += 2**(i - 1)
+        return mask
+
+    def current_state(self, givens_only=False, include_possibles=True):
         # return the state of the board as would be loaded
         line = 'x' if self.x_regions else u''
         line2 = ''
+        line3 = ''
         for y in range(N_2):
             for x in range(N_2):
                 sq = self.grid[y][x]
@@ -215,9 +246,15 @@ class Sudoku:
                 else:
                     line += '.'
                     line2 += '.'
+                if sq.is_unknown():
+                    line3 += '...'
+                else:
+                    line3 += '{:03d}'.format(self._possible_value_mask(sq))
         if givens_only:
             return line
-        return line + line2
+        if not include_possibles:
+            return line + line2
+        return line + line2 + line3
 
     def is_solved(self):
         for s in self.sets:
@@ -333,7 +370,6 @@ class Sudoku:
             square = self.grid[self.cursor_y][self.cursor_x]
         self.stdscr.nodelay(False)
         self.log(status(start_square, square), replace=True)
-
 
     def select_next_square(self):
         # advance
@@ -565,7 +601,6 @@ class Sudoku:
         while key != 'q':
             try:
                 key = self.stdscr.getkey()
-                self.steps += 1
             except:
                 # screen was resized or something
                 key = None
@@ -617,7 +652,13 @@ class Sudoku:
             self.save_state()
         elif key == 'u':    # open
             if any(self.saved_states):
-                self.load_game(self.saved_states.pop())
+                self.redo_states.append(initial_state)
+                new_state = self.saved_states.pop()
+                initial_state = new_state
+                self.load_game(new_state)
+        elif key == 'r':
+            if any(self.redo_states):
+                self.load_game(self.redo_states.pop())
         elif key == 'g':    # generate
             self.generate()
         elif key == 'H':
@@ -625,7 +666,8 @@ class Sudoku:
         elif key == 'x':
             self.set_x_regions(not self.x_regions)
         if self.current_state() != initial_state:
-            self.save_state(False)
+            self.save_state(log=False)
+            self.steps += 1
 
     def save_state(self, log=True):
         self.saved_states.append(self.current_state())

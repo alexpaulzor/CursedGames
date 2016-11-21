@@ -89,6 +89,10 @@ class Square(object):
                 self.clear()
         else:
             self.possible_values.add(value)
+        self.set_possible_values(self.possible_values)
+
+    def set_possible_values(self, possible_values):
+        self.possible_values = possible_values
         if len(self.possible_values) == 1:
             self._value = tuple(self.possible_values)[0]
         else:
