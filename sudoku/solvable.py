@@ -70,7 +70,7 @@ class Square(object):
         if self.prevented_value in self.value_attempts:
             self.value_attempts.remove(self.prevented_value)
 
-    def reset(self):
+    def prepare_for_generate(self):
         if self.get_value():
             self.set_value(self.get_value(), False)
         else:
@@ -108,11 +108,8 @@ class Square(object):
             for square in s.squares:
                 if not square.is_unknown() and square != self:
                     sv = square.get_value()
-                    # v = self.get_value()
                     if sv and sv in self.possible_values:
                         sqs.add(square)
-                    # elif v and v in square.possible_values):
-                    #     sqs.add(square)
         return sqs
 
     def infer_values(self):

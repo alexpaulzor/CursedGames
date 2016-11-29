@@ -6,15 +6,14 @@ import sys
 from random import shuffle
 import time
 from solvable import Square, ExclusiveSet
-from sudokuboard import SudokuBoard, N, N_2, N_4
+from sudokuboard import SudokuBoard, N, N_2, N_4, MIN_CLUES, MAX_CLUES
 
 COLOR_SELECTED = 10
 COLOR_SAME = 12
 COLOR_CONFLICT = 13
 COLOR_X = 11
 
-MIN_CLUES = 17
-MAX_CLUES = 24
+
 
 
 class Sudoku:
@@ -221,9 +220,9 @@ class Sudoku:
             self.draw_small = not self.draw_small
             self.stdscr.clear()
         elif key == 'a':
-            self.board.smart_solve()
+            self.board.solve_step()
         elif key == 'A':
-            self.solve(None)
+            self.board.bruteforce()
         elif key == 'R':
             self.log(self.current_state())
             self.log('resetting from:')
@@ -247,14 +246,20 @@ class Sudoku:
             if any(self.redo_states):
                 self.load_game(self.redo_states.pop())
         elif key == 'g':    # generate
-            self.board.generate()
+            for msg in self.board.generate():
+                self.log(msg, replace=True)
         elif key == 'H':
             self.help()
         elif key == 'x':
-            self.board.set_x_regions(not self.x_regions)
+            self.board.set_x_regions(not self.board.x_regions)
         if self.board.current_state() != initial_state:
             self.save_state(log=False)
             self.steps += 1
+
+    def _poll_key(self):
+        self.stdscr.nodelay(True)
+        key = self.stdscr.getch()
+
 
     def save_state(self, log=True):
         self.saved_states.append(self.board.current_state())
