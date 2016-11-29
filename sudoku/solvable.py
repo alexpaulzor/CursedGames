@@ -118,10 +118,8 @@ class Square(object):
     def infer_values(self):
         if self.get_value():
             return
-        self.clear()
-        self.possible_values = self._inferred_possible_values()
-        if len(self.possible_values) == 1:
-            self.set_value(list(self.possible_values)[0])
+        self.set_possible_values(self.possible_values &
+                                 self._inferred_possible_values())
 
     def _inferred_possible_values(self):
         possible_values = set(range(1, 10))
@@ -174,14 +172,17 @@ class ExclusiveSet(object):
             return
         known_values = self.known_values()
         # value -> set(squares possibly that value)
-        possibles = { i: set() for i in range(1, 10) }
+        possibles = {i: set() for i in range(1, 10)}
         for sq in self.squares:
             for v in sq.possible_values:
                 possibles[v].add(sq)
 
         for v, sqs in possibles.iteritems():
+            # If there's only one square with a given possible_value, solved!
             if v not in known_values and len(sqs) == 1:
                 sq.set_value(v)
+
+        # projection: if all of the squares including possible_value i are
 
 
     def add_square(self, square):
