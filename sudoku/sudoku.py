@@ -6,15 +6,13 @@ import sys
 from random import shuffle
 import time
 from solvable import Square, ExclusiveSet
-from sudokuboard import SudokuBoard, N, N_2, N_4, MIN_CLUES, MAX_CLUES
+from sudokuboard import (SudokuBoard, SudokuBoardSolver, SudokuBoardGenerator,
+    N, N_2, N_4, MIN_CLUES, MAX_CLUES)
 
 COLOR_SELECTED = 10
 COLOR_SAME = 12
 COLOR_CONFLICT = 13
 COLOR_X = 11
-
-
-
 
 class Sudoku:
     def __init__(self, x_regions=False):
@@ -23,7 +21,7 @@ class Sudoku:
         self.saved_states = []
         self.redo_states = []
         self.steps = 0
-        self.board = SudokuBoard(x_regions)
+        self.board = SudokuBoardSolver(x_regions)
 
     def _get_blank_board_strings(self):
         if self.draw_small:
@@ -169,8 +167,6 @@ class Sudoku:
 
             self.board.cursor_x = self.board.cursor_x % N_2
             self.board.cursor_y = self.board.cursor_y % N_2
-            if self.board.is_solved():
-                self.log("You won!")
             self.draw_board()
         self.draw_board()
 
@@ -182,15 +178,15 @@ class Sudoku:
             "c: clear",
             "s: toggle small board",
             "a: autosolve step",
-            "A: autosolve until key press",
+            "A: autosolve until pressed again",
             "R: reset board",
-            "f: fill in possible values",
+            "f: fill in possible values (current sq)",
             "F: fill in all possible values (board)",
             "w: save (write) current state",
             "o: load last save",
             "u: undo",
             "r: redo",
-            "g: generate board (sloooow)",
+            "g: generate board until pressed again",
             "x: toggle x regions",
             "H: this help",
             "q: quit"
@@ -222,10 +218,23 @@ class Sudoku:
         elif key == 'a':
             self.board.solve_step()
         elif key == 'A':
-            self.board.bruteforce()
+            self.stdscr.nodelay(True)
+            last_status_clock = time.clock()
+            for msg in self.board.bruteforce_iter():
+                if time.clock() - last_status_clock > 1:
+                    last_status_clock = time.clock()
+                    self.log(msg, replace=True)
+                    key = self.stdscr.getch()
+                    if key == ord('A'):
+                        self.log(chr(key))
+                        break
+                    self.draw_board()
+            self.stdscr.nodelay(False)
+            if not self.board.is_solved():
+                self.log("Unsolvable!")
         elif key == 'R':
-            self.log(self.current_state())
-            self.log('resetting from:')
+            self.log('resetting from: ' + self.board.current_state())
+            self.log()
             self.board.load_game(self.board.original_state)
             self.board.load_game(self.board.current_state(givens_only=True, include_possibles=False))
         elif key == 'f':
@@ -246,8 +255,21 @@ class Sudoku:
             if any(self.redo_states):
                 self.load_game(self.redo_states.pop())
         elif key == 'g':    # generate
-            for msg in self.board.generate():
-                self.log(msg, replace=True)
+            self.stdscr.nodelay(True)
+            self.board = SudokuBoardGenerator(self.board.x_regions)
+            gi = self.board.generate_iter()
+            self.log(next(gi))
+            last_status_clock = time.clock()
+            for msg in gi:
+                if 'gen' in msg or time.clock() - last_status_clock > 1:
+                    last_status_clock = time.clock()
+                    self.log(msg, replace=('gen' not in msg))
+                    self.draw_board()
+                    key = self.stdscr.getch()
+                    if key == ord('g'):
+                        self.log('Generate stopped.')
+                        break
+            self.stdscr.nodelay(False)
         elif key == 'H':
             self.help()
         elif key == 'x':
@@ -255,11 +277,6 @@ class Sudoku:
         if self.board.current_state() != initial_state:
             self.save_state(log=False)
             self.steps += 1
-
-    def _poll_key(self):
-        self.stdscr.nodelay(True)
-        key = self.stdscr.getch()
-
 
     def save_state(self, log=True):
         self.saved_states.append(self.board.current_state())

@@ -60,13 +60,14 @@ class Square(object):
         if self.is_given:
             self.value_attempts = []
             return
-        all_values = set(range(1, 10))
-        probable_values = self._inferred_possible_values()
-        improbable_values = list(all_values - probable_values)
-        probable_values = list(probable_values)
-        shuffle(probable_values)
-        shuffle(improbable_values)
-        self.value_attempts = probable_values + improbable_values
+        self.value_attempts = range(1, 10)
+        shuffle(self.value_attempts)
+        #probable_values = self._inferred_possible_values()
+        #improbable_values = list(all_values - probable_values)
+        #probable_values = list(probable_values)
+        #shuffle(probable_values)
+        #shuffle(improbable_values)
+        #self.value_attempts = all_values
         if self.prevented_value in self.value_attempts:
             self.value_attempts.remove(self.prevented_value)
 
@@ -93,6 +94,8 @@ class Square(object):
 
     def set_possible_values(self, possible_values):
         self.possible_values = possible_values
+        if self.prevented_value in self.possible_values:
+            self.possible_values.remove(self.prevented_value)
         if len(self.possible_values) == 1:
             self._value = tuple(self.possible_values)[0]
         else:

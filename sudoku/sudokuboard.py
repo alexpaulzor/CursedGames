@@ -11,6 +11,9 @@ N_2 = N * N
 N_3 = N_2 * N
 N_4 = N_3 * N
 
+# TODO: allow increased/decreased verbosity?
+YIELD_ITERS = 500
+
 class SudokuBoard(object):
     def __init__(self, x_regions=False):
         self.start_time = time.clock()
@@ -22,6 +25,7 @@ class SudokuBoard(object):
         self.go_forward = True
         self.x_regions = x_regions
         self.original_state = None
+        self.clues = 0
         self.saved_states = []
         self.redo_states = []
         self.build_rows()
@@ -129,97 +133,6 @@ class SudokuBoard(object):
         else:
             self._log.append(message)
 
-
-    def generate(self):
-        # generate a game
-        for row in self.grid:
-            for sq in row:
-                sq.prepare_for_generate()
-        solution = self.compute_solution()
-        if not solution:
-            self.log("Cannot solve! " + self.current_state(include_possibles=False))
-            return
-
-        def given_str(givens):
-            return ('x' if self.x_regions else '') + ''.join(givens)
-
-        givens = list(solution)
-        if self.x_regions:
-            givens = givens[1:]
-        givens = ['.'] * N_4 + givens[81:]
-        all_squares = reduce(lambda l, row: l + row, self.grid, [])
-        shuffle(all_squares)
-
-        self.load_game(given_str(givens))
-        self.log("complete: " + solution)
-        yield
-
-        sq = all_squares.pop()
-        clues = 0
-        while True:
-            # Pick a random square that is not uncertain
-            while any(all_squares) and (sq.is_given or not sq.get_value()):
-                sq = all_squares.pop()
-            if not any(all_squares) or len(all_squares) + clues <= MIN_CLUES:
-                key = 0
-                break
-            self.cursor_x = sq.x
-            self.cursor_y = sq.y
-            sq_val = sq.get_value()
-            sq.prevent_value(sq_val)
-            self.log('[{} togo / {} clues] generate trying without: {}'.format(
-                len(all_squares), clues, str(sq)))
-            givens[N_2 * sq.y + sq.x] = '.'
-            givens[81 + 9 * sq.y + sq.x] = '.'
-            new_solution = self.compute_solution(given_str(givens[81:]))
-            sq.prevent_value(None)
-            if new_solution is False:
-                # interrupted, give up
-                key = 0
-
-            if new_solution and new_solution != solution:
-                # can't remove this square, since it's unsolvable
-                # or solvable another way without it
-                clues += 1
-                self.log("keeping {} ({} clues)".format(sq, clues))
-                sq.set_value(sq_val, True)
-                givens[N_2 * sq.y + sq.x] = str(sq_val)
-                givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
-
-            else:
-                # can remove this square
-                self.log("removing {}".format(sq))
-            self.load_game(given_str(givens))
-        self.log('Done! No more squares to try ' + given_str(givens[:81]))
-        if self.clues <= MAX_CLUES:
-        # if len(all_squares) + clues <= MAX_CLUES:
-        #     for sq in all_squares:
-        #         sq_val = sq.get_value()
-        #         if not sq_val:
-        #             continue
-        #         sq.set_value(sq_val, True)
-        #         givens[N_2 * sq.y + sq.x] = str(sq_val)
-        #         givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
-        #         clues += 1
-            self.log('saving with {} clues'.format(self.clues))
-            with open('puzzles/generated.sudoku', 'a') as f:
-                f.write(given_str(givens[:81]) + '\n')
-        self.load_game(given_str(givens))
-
-    def compute_solution(self, initial_state=None):
-        backup_state = self.current_state()
-        backup_direction = self.go_forward
-        if initial_state is not None:
-            self.load_game(initial_state)
-        self.log("solving from: " + self.current_state(include_possibles=False))
-        self.go_forward = True
-        for msg in self.solve():
-            pass
-        solution = self.current_state(include_possibles=False)
-        self.load_game(backup_state)
-        self.go_forward = backup_direction
-        return solution
-
     def is_solved(self):
         for s in self.sets:
             if not s.is_solved():
@@ -228,24 +141,125 @@ class SudokuBoard(object):
             for square in row:
                 if not square.is_solved():
                     return False
-
         self.complete_solution = self.current_state(include_possibles=False)
-
         return True
 
-    def solve(self):
+    # TODO: profile against is_solved()
+    # def check_solution(self):
+    #     for y in range(N_2):
+    #         # check column y
+    #         values = filter(
+    #             None,
+    #             [self.grid[y][i].get_value() for i in range(N_2)])
+    #         if len(values) != len(set(values)):
+    #             return False
+    #         for x in range(N_2):
+    #             # check row
+    #             values = filter(
+    #                 None,
+    #                 [self.grid[i][x].get_value() for i in range(N_2)])
+    #             if len(values) != len(set(values)):
+    #                 return False
+    #     # check 3x3 grids
+    #     for qy in range(N):
+    #         for qx in range(N):
+    #             values = filter(
+    #                 None,
+    #                 [self.grid[N * qy + i % N][N * qx + i / N].get_value()
+    #                  for i in range(N_2)])
+    #             if len(values) != len(set(values)):
+    #                 return False
+    #     if self.x_regions:
+    #         down_values = filter(
+    #             None,
+    #             [self.grid[i][i].get_value() for i in range(N_2)])
+    #         up_values = filter(
+    #             None,
+    #             [self.grid[N_2 - 1 - i][i].get_value() for i in range(N_2)])
+    #         if len(down_values) != len(set(down_values)):
+    #             return False
+    #         if len(up_values) != len(set(up_values)):
+    #             return False
+    #     return True
+
+
+    def select_next_square(self):
+        # advance
+        if self.cursor_x == N_2 - 1:
+            self.cursor_y += 1
+            self.cursor_x = 0
+            if self.cursor_y == N_2:
+                self.cursor_y = 0
+        else:
+            self.cursor_x += 1
+
+    def select_prev_square(self):
+        # go back
+        if self.cursor_x > 0:
+            self.cursor_x -= 1
+        elif self.cursor_y > 0:
+            self.cursor_y -= 1
+            self.cursor_x = N_2 - 1
+        else:
+            # back at 0,0
+            self.cursor_x = N_2 - 1
+            self.cursor_y = N_2 - 1
+
+    def build_rows(self):
+        for y in range(N_2):
+            row = ExclusiveSet("row_{}".format(y))
+            for x in range(N_2):
+                row.add_square(self.grid[y][x])
+            self.sets.add(row)
+
+    def build_columns(self):
+        for x in range(N_2):
+            column = ExclusiveSet("col_{}".format(x))
+            for y in range(N_2):
+                column.add_square(self.grid[y][x])
+            self.sets.add(column)
+
+    def build_sectors(self):
+        for i in range(N):
+            for j in range(N):
+                sector = ExclusiveSet("sector_{},{}".format(j, i))
+                for y in range(N * i, N * i + N):
+                    for x in range(N * j, N * j + N):
+                        sector.add_square(self.grid[y][x])
+                self.sets.add(sector)
+
+    def build_x_regions(self):
+        self.x_down = ExclusiveSet('x_down', enabled=self.x_regions)
+        self.x_up = ExclusiveSet('x_up', enabled=self.x_regions)
+        for x in range(N_2):
+            self.x_down.add_square(self.grid[x][x])
+            self.x_up.add_square(self.grid[N_2 - 1 - x][x])
+        self.sets.add(self.x_down)
+        self.sets.add(self.x_up)
+
+    def set_x_regions(self, enable_x_regions):
+        self.x_regions = enable_x_regions
+        self.x_down.set_enabled(self.x_regions)
+        self.x_up.set_enabled(self.x_regions)
+
+    @property
+    def selected_square(self):
+        return self.grid[self.cursor_y][self.cursor_x]
+
+class SudokuBoardSolver(SudokuBoard):
+    def solve_iter(self):
         """Solve, no matter what."""
         start_square = self.grid[self.cursor_y][self.cursor_x]
         #self.smart_solve()
-        for msg in self.bruteforce():
+        for msg in self.bruteforce_iter():
             yield msg
         if self.is_solved():
             state = self.current_state(include_possibles=False)
-            self.log("Solved! " + state)
+            yield "Solved! " + state
             return
         else:
             if not any(start_square.value_attempts):
-                self.log("Unsolvable!")
+                yield "Unsolvable!"
             return
 
     # def smart_solve(self):
@@ -302,7 +316,7 @@ class SudokuBoard(object):
     # def hidden_groups(self):
     #     """ """
 
-    def bruteforce(self):
+    def bruteforce_iter(self):
         start_square = self.selected_square
         while start_square.is_given:
             self.select_prev_square()
@@ -321,14 +335,14 @@ class SudokuBoard(object):
                 (N_2 - len(start_square.value_attempts)) * 100.0 / N_2 +
                 ((current_i - start_i) % N_4) * 100.0 / N_4 / N_2)
 
-            return "(~{:.2f}%) solve {} {} at {}".format(
+            return "bf(~{:.2f}%) {} {} at {}".format(
                 pct_complete,
                 '>' if self.go_forward else '<',
                 start_square,
                 square)
 
         yield status(start_square, square)
-        steps = 0
+        i = 0
         while (not self.is_solved() and
                any(start_square.value_attempts)):
             yield status(start_square, square)
@@ -354,112 +368,98 @@ class SudokuBoard(object):
                 if square != start_square:
                     square.clear()
                     self.select_prev_square()
-
-            if steps % 5000 == 0:
+            i += 1
+            if i % YIELD_ITERS == 0:
                 yield status(start_square, square)
-            steps += 1
 
             square = self.grid[self.cursor_y][self.cursor_x]
-        self.log(status(start_square, square), replace=True)
+        # self.log(status(start_square, square), replace=True)
 
-    def select_next_square(self):
-        # advance
-        if self.cursor_x == N_2 - 1:
-            self.cursor_y += 1
-            self.cursor_x = 0
-            if self.cursor_y == N_2:
-                self.cursor_y = 0
+
+class SudokuBoardGenerator(SudokuBoardSolver):
+    def generate_iter(self):
+        # generate a game
+        for row in self.grid:
+            for sq in row:
+                sq.prepare_for_generate()
+        self.log("gen: Computing solution...")
+        for msg in self.solve_iter():
+            yield msg
+        solution = self.current_state()
+        if not solution:
+            self.log("gen: Cannot solve! " + self.current_state(include_possibles=False))
+            return
+
+        def given_str(givens):
+            return ('x' if self.x_regions else '') + ''.join(givens)
+
+        givens = list(solution)
+        if self.x_regions:
+            givens = givens[1:]
+        givens = ['.'] * N_4 + givens[81:]
+        all_squares = reduce(lambda l, row: l + row, self.grid, [])
+        shuffle(all_squares)
+
+        self.load_game(given_str(givens))
+        self.log("gen: complete: " + solution)
+
+        sq = None
+        given_squares = set()
+        while True:
+            sq = all_squares.pop()
+            # Pick a random square that is not uncertain
+            while any(all_squares) and (sq.is_given or not sq.get_value()):
+                sq = all_squares.pop()
+            if not any(all_squares) or len(all_squares) + len(given_squares) <= MIN_CLUES:
+                self.log('gen: down to {} clues'.format(len(all_squares) + len(given_squares)))
+                break
+            self.cursor_x = sq.x
+            self.cursor_y = sq.y
+            sq_val = sq.get_value()
+            sq.prevent_value(sq_val)
+            yield 'gen: [{} togo / {} clues] generate trying without: {}'.format(
+                len(all_squares), len(given_squares), str(sq))
+            givens[N_2 * sq.y + sq.x] = '.'
+            givens[81 + 9 * sq.y + sq.x] = '.'
+
+            self.load_game(given_str(givens))
+            for msg in self.solve_iter():
+                yield msg
+            sq.prevent_value(None)
+            if self.is_solved() and self.current_state() != solution:
+                # can't remove this square, since it's unsolvable
+                # or solvable another way without it
+                given_squares.add(sq)
+                yield "gen: keeping {} ({} clues)".format(sq, len(given_squares))
+                sq.set_value(sq_val, True)
+                givens[N_2 * sq.y + sq.x] = str(sq_val)
+                givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
+
+            else:
+                # can remove this square
+                yield "gen: removing {}".format(sq)
+
+            self.load_game(given_str(givens))
+        yield 'gen: Done! ' + given_str(givens[:81])
+        while len(given_squares) > MIN_CLUES:
+            sq = all_squares.pop()
+            sq_val = sq.get_value()
+            if not sq_val:
+                continue
+            sq.set_value(sq_val, True)
+            givens[N_2 * sq.y + sq.x] = str(sq_val)
+            givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
+            given_squares.add(sq)
+        self.load_game(given_str(givens))
+        if MIN_CLUES <= len(given_squares) <= MAX_CLUES:
+            self.write_to_generated_log()
         else:
-            self.cursor_x += 1
+            self.log('gen: Interrupted with {} clues'.format(len(given_squares)))
 
-    def select_prev_square(self):
-        # go back
-        if self.cursor_x > 0:
-            self.cursor_x -= 1
-        elif self.cursor_y > 0:
-            self.cursor_y -= 1
-            self.cursor_x = N_2 - 1
-        else:
-            # back at 0,0
-            self.cursor_x = N_2 - 1
-            self.cursor_y = N_2 - 1
+    def write_to_generated_log(self):
+        self.log('saving with {} clues'.format(self.clues))
+        with open('puzzles/generated.sudoku', 'a') as f:
+            f.write(self.current_state(givens_only=True) + '\n')
 
-    # def check_solution(self):
-    #     for y in range(N_2):
-    #         # check column y
-    #         values = filter(
-    #             None,
-    #             [self.grid[y][i].get_value() for i in range(N_2)])
-    #         if len(values) != len(set(values)):
-    #             return False
-    #         for x in range(N_2):
-    #             # check row
-    #             values = filter(
-    #                 None,
-    #                 [self.grid[i][x].get_value() for i in range(N_2)])
-    #             if len(values) != len(set(values)):
-    #                 return False
-    #     # check 3x3 grids
-    #     for qy in range(N):
-    #         for qx in range(N):
-    #             values = filter(
-    #                 None,
-    #                 [self.grid[N * qy + i % N][N * qx + i / N].get_value()
-    #                  for i in range(N_2)])
-    #             if len(values) != len(set(values)):
-    #                 return False
-    #     if self.x_regions:
-    #         down_values = filter(
-    #             None,
-    #             [self.grid[i][i].get_value() for i in range(N_2)])
-    #         up_values = filter(
-    #             None,
-    #             [self.grid[N_2 - 1 - i][i].get_value() for i in range(N_2)])
-    #         if len(down_values) != len(set(down_values)):
-    #             return False
-    #         if len(up_values) != len(set(up_values)):
-    #             return False
-    #     return True
-
-    def build_rows(self):
-        for y in range(N_2):
-            row = ExclusiveSet("row_{}".format(y))
-            for x in range(N_2):
-                row.add_square(self.grid[y][x])
-            self.sets.add(row)
-
-    def build_columns(self):
-        for x in range(N_2):
-            column = ExclusiveSet("col_{}".format(x))
-            for y in range(N_2):
-                column.add_square(self.grid[y][x])
-            self.sets.add(column)
-
-    def build_sectors(self):
-        for i in range(N):
-            for j in range(N):
-                sector = ExclusiveSet("sector_{},{}".format(j, i))
-                for y in range(N * i, N * i + N):
-                    for x in range(N * j, N * j + N):
-                        sector.add_square(self.grid[y][x])
-                self.sets.add(sector)
-
-    def build_x_regions(self):
-        self.x_down = ExclusiveSet('x_down', enabled=self.x_regions)
-        self.x_up = ExclusiveSet('x_up', enabled=self.x_regions)
-        for x in range(N_2):
-            self.x_down.add_square(self.grid[x][x])
-            self.x_up.add_square(self.grid[N_2 - 1 - x][x])
-        self.sets.add(self.x_down)
-        self.sets.add(self.x_up)
-
-    def set_x_regions(self, enable_x_regions):
-        self.x_regions = enable_x_regions
-        self.x_down.set_enabled(self.x_regions)
-        self.x_up.set_enabled(self.x_regions)
-
-    @property
-    def selected_square(self):
-        return self.grid[self.cursor_y][self.cursor_x]
 
 
