@@ -60,14 +60,14 @@ class Square(object):
         if self.is_given:
             self.value_attempts = []
             return
-        self.value_attempts = range(1, 10)
-        shuffle(self.value_attempts)
-        #probable_values = self._inferred_possible_values()
-        #improbable_values = list(all_values - probable_values)
-        #probable_values = list(probable_values)
-        #shuffle(probable_values)
-        #shuffle(improbable_values)
-        #self.value_attempts = all_values
+        all_values = set(range(1, 10))
+        self.value_attempts = list(all_values)
+        # probable_values = self._inferred_possible_values()
+        # improbable_values = list(all_values - probable_values)
+        # ideal_values = probable_values & self.possible_values
+        # probable_values -= ideal_values
+        # self.value_attempts = (list(ideal_values) + list(probable_values) +
+        #                        list(improbable_values))
         if self.prevented_value in self.value_attempts:
             self.value_attempts.remove(self.prevented_value)
 
@@ -180,7 +180,8 @@ class ExclusiveSet(object):
         for v, sqs in possibles.iteritems():
             # If there's only one square with a given possible_value, solved!
             if v not in known_values and len(sqs) == 1:
-                sq.set_value(v)
+                next(iter(sqs)).set_value(v)
+                return
 
         # projection: if all of the squares including possible_value i are
 

@@ -137,51 +137,7 @@ class SudokuBoard(object):
         for s in self.sets:
             if not s.is_solved():
                 return False
-        for row in self.grid:
-            for square in row:
-                if not square.is_solved():
-                    return False
-        self.complete_solution = self.current_state(include_possibles=False)
         return True
-
-    # TODO: profile against is_solved()
-    # def check_solution(self):
-    #     for y in range(N_2):
-    #         # check column y
-    #         values = filter(
-    #             None,
-    #             [self.grid[y][i].get_value() for i in range(N_2)])
-    #         if len(values) != len(set(values)):
-    #             return False
-    #         for x in range(N_2):
-    #             # check row
-    #             values = filter(
-    #                 None,
-    #                 [self.grid[i][x].get_value() for i in range(N_2)])
-    #             if len(values) != len(set(values)):
-    #                 return False
-    #     # check 3x3 grids
-    #     for qy in range(N):
-    #         for qx in range(N):
-    #             values = filter(
-    #                 None,
-    #                 [self.grid[N * qy + i % N][N * qx + i / N].get_value()
-    #                  for i in range(N_2)])
-    #             if len(values) != len(set(values)):
-    #                 return False
-    #     if self.x_regions:
-    #         down_values = filter(
-    #             None,
-    #             [self.grid[i][i].get_value() for i in range(N_2)])
-    #         up_values = filter(
-    #             None,
-    #             [self.grid[N_2 - 1 - i][i].get_value() for i in range(N_2)])
-    #         if len(down_values) != len(set(down_values)):
-    #             return False
-    #         if len(up_values) != len(set(up_values)):
-    #             return False
-    #     return True
-
 
     def select_next_square(self):
         # advance
@@ -246,75 +202,86 @@ class SudokuBoard(object):
     def selected_square(self):
         return self.grid[self.cursor_y][self.cursor_x]
 
+
 class SudokuBoardSolver(SudokuBoard):
     def solve_iter(self):
         """Solve, no matter what."""
-        start_square = self.grid[self.cursor_y][self.cursor_x]
-        #self.smart_solve()
-        for msg in self.bruteforce_iter():
+
+        for msg in self.smart_solve_iter():
             yield msg
         if self.is_solved():
             state = self.current_state(include_possibles=False)
             yield "Solved! " + state
             return
         else:
-            if not any(start_square.value_attempts):
-                yield "Unsolvable!"
+            yield "Could not solve!"
+
+    def smart_solve_iter(self):
+        while not self.is_solved():
+            if not self.solve_step():
+                break
+            # TODO: catch keyboardinterrupt
+        if self.is_solved():
             return
+        self.log("No more progress from solve_step, bruteforcing...")
 
-    # def smart_solve(self):
-    #     prev_state = None
-    #     while self.current_state() != prev_state:
-    #         self.solve_step(False)
-    #         # TODO: catch keyboardinterrupt
-    #         if self.is_solved():
-    #             return self.current_state(include_possibles=False)
+        start_square = self.selected_square
+        for msg in self.bruteforce_iter():
+            yield msg
+        if not any(start_square.value_attempts):
+            yield "Unsolvable!"
 
-    # def solve_step(self, log=True):
-    #     prev_state = self.current_state()
-    #     if log:
-    #         self.log("infer_values...")
-    #     for row in self.grid:
-    #         for sq in row:
-    #             sq.infer_values()
-    #     if self.current_state() != prev_state:
-    #         return
-    #     if log:
-    #         self.log("try_solve...")
-    #     for s in self.sets:
-    #         s.try_solve()
-    #     if self.current_state() != prev_state:
-    #         return
-    #     if log:
-    #         self.log("solve_naked_groups...")
-    #     self.solve_naked_groups()
-    #     if self.current_state() != prev_state:
-    #         return
+    def solve_step(self):
+        """return truthy if progress was made"""
+        prev_state = self.current_state()
+        # self.log("infer_values...")
+        for row in self.grid:
+            for sq in row:
+                sq.infer_values()
+        if self.current_state() != prev_state:
+            return True
+        # self.log("try_solve...")
+        for s in self.sets:
+            s.try_solve()
+        if self.current_state() != prev_state:
+            return True
+        # self.log("solve_naked_groups...")
+        self.solve_naked_groups()
 
-    # def solve_naked_groups(self):
-    #     """find groups of 2 or 3 of values in the same set
-    #     and remove that group from the rest of the squares in that set
+        return self.current_state() != prev_state
 
-    #     A Naked Pair (also known as a Conjugate Pair) is a set of two candidate numbers sited in two cells that belong to at least one unit in common. That is, they reside in the same row, column or box.
-    #     It is clear that the solution will contain those values in those two cells, and all other candidates with those numbers can be removed from whatever unit(s) they have in common.
+    def solve_naked_groups(self):
+        """find groups of 2 or 3 of values in the same set
+        and remove that group from the rest of the squares in that set
 
-    #     Naked Triple:
-    #     Any group of three cells in the same unit that contain IN TOTAL three candidates is a Naked Triple.
-    #     Each cell can have two or three numbers, as long as in combination all three cells have only three numbers.
-    #     When this happens, the three candidates can be removed from all other cells in the same unit.
+        A Naked Pair (also known as a Conjugate Pair) is a set of two candidate
+        numbers sited in two cells that belong to at least one unit in common.
+        That is, they reside in the same row, column or box.
+        It is clear that the solution will contain those values in those two
+        cells, and all other candidates with those numbers can be removed from
+        whatever unit(s) they have in common.
 
-    #     The combinations of candidates for a Naked Triple will be one of the following:
+        Naked Triple:
+        Any group of three cells in the same unit that contain IN TOTAL three
+        candidates is a Naked Triple.
+        Each cell can have two or three numbers, as long as in combination all
+        three cells have only three numbers.
+        When this happens, the three candidates can be removed from all other
+        cells in the same unit.
 
-    #     (123) (123) (123) - {3/3/3} (in terms of candidates per cell)
-    #     (123) (123) (12) - {3/3/2} (or some combination thereof)
-    #     (123) (12) (23) - {3/2/2/}
-    #     (12) (23) (13) - {2/2/2}
-    #     """
-    #     for s in self.sets:
-    #         pass
+        The combinations of candidates for a Naked Triple will be one of the
+        following:
 
-    # def hidden_groups(self):
-    #     """ """
+        (123) (123) (123) - {3/3/3} (in terms of candidates per cell)
+        (123) (123) (12) - {3/3/2} (or some combination thereof)
+        (123) (12) (23) - {3/2/2/}
+        (12) (23) (13) - {2/2/2}
+        """
+        for s in self.sets:
+            pass
+
+    def hidden_groups(self):
+        """ """
 
     def bruteforce_iter(self):
         start_square = self.selected_square
@@ -385,9 +352,9 @@ class SudokuBoardGenerator(SudokuBoardSolver):
         self.log("gen: Computing solution...")
         for msg in self.solve_iter():
             yield msg
-        solution = self.current_state()
-        if not solution:
-            self.log("gen: Cannot solve! " + self.current_state(include_possibles=False))
+        solution = self.current_state(include_possibles=False)
+        if not self.is_solved():
+            self.log("gen: Cannot solve! " + solution)
             return
 
         def given_str(givens):
@@ -410,19 +377,20 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             # Pick a random square that is not uncertain
             while any(all_squares) and (sq.is_given or not sq.get_value()):
                 sq = all_squares.pop()
-            if not any(all_squares) or len(all_squares) + len(given_squares) <= MIN_CLUES:
-                self.log('gen: down to {} clues'.format(len(all_squares) + len(given_squares)))
+            if not any(all_squares) or (
+                    len(all_squares) + len(given_squares) <= MIN_CLUES):
                 break
             self.cursor_x = sq.x
             self.cursor_y = sq.y
             sq_val = sq.get_value()
             sq.prevent_value(sq_val)
-            yield 'gen: [{} togo / {} clues] generate trying without: {}'.format(
+            msg = 'gen: [{} togo / {} clues] gen trying without: {}'.format(
                 len(all_squares), len(given_squares), str(sq))
+            self.log(msg)
             givens[N_2 * sq.y + sq.x] = '.'
             givens[81 + 9 * sq.y + sq.x] = '.'
 
-            self.load_game(given_str(givens))
+            self.load_game(given_str(givens[81:]))
             for msg in self.solve_iter():
                 yield msg
             sq.prevent_value(None)
@@ -430,17 +398,21 @@ class SudokuBoardGenerator(SudokuBoardSolver):
                 # can't remove this square, since it's unsolvable
                 # or solvable another way without it
                 given_squares.add(sq)
-                yield "gen: keeping {} ({} clues)".format(sq, len(given_squares))
+                msg = "gen: keeping {} ({} clues)".format(
+                    sq, len(given_squares))
+                self.log(msg)
                 sq.set_value(sq_val, True)
                 givens[N_2 * sq.y + sq.x] = str(sq_val)
                 givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
 
             else:
                 # can remove this square
-                yield "gen: removing {}".format(sq)
+                msg = "gen: removing {}".format(sq)
+                self.log(msg)
 
             self.load_game(given_str(givens))
-        yield 'gen: Done! ' + given_str(givens[:81])
+            yield "ggg"
+        self.log('gen: Done! ' + given_str(givens[:81]))
         while len(given_squares) > MIN_CLUES:
             sq = all_squares.pop()
             sq_val = sq.get_value()
@@ -454,12 +426,10 @@ class SudokuBoardGenerator(SudokuBoardSolver):
         if MIN_CLUES <= len(given_squares) <= MAX_CLUES:
             self.write_to_generated_log()
         else:
-            self.log('gen: Interrupted with {} clues'.format(len(given_squares)))
+            self.log('gen: Interrupted with {} clues'.format(
+                len(given_squares)))
 
     def write_to_generated_log(self):
         self.log('saving with {} clues'.format(self.clues))
         with open('puzzles/generated.sudoku', 'a') as f:
             f.write(self.current_state(givens_only=True) + '\n')
-
-
-

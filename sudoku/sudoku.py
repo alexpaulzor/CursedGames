@@ -220,7 +220,7 @@ class Sudoku:
         elif key == 'A':
             self.stdscr.nodelay(True)
             last_status_clock = time.clock()
-            for msg in self.board.bruteforce_iter():
+            for msg in self.board.solve_iter():
                 if time.clock() - last_status_clock > 1:
                     last_status_clock = time.clock()
                     self.log(msg, replace=True)
@@ -234,8 +234,7 @@ class Sudoku:
                 self.log("Unsolvable!")
         elif key == 'R':
             self.log('resetting from: ' + self.board.current_state())
-            self.log()
-            self.board.load_game(self.board.original_state)
+            #self.board.load_game(self.board.original_state)
             self.board.load_game(self.board.current_state(givens_only=True, include_possibles=False))
         elif key == 'f':
             self.board.grid[self.board.cursor_y][self.board.cursor_x].infer_values()
