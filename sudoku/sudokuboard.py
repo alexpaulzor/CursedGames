@@ -423,13 +423,14 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
             given_squares.add(sq)
         self.load_game(given_str(givens))
-        if MIN_CLUES <= len(given_squares) <= MAX_CLUES:
+        if MIN_CLUES <= self.clues <= MAX_CLUES:
             self.write_to_generated_log()
         else:
             self.log('gen: Interrupted with {} clues'.format(
                 len(given_squares)))
 
     def write_to_generated_log(self):
-        self.log('saving with {} clues'.format(self.clues))
+        givens = self.current_state(givens_only=True)
+        self.log('saving with {} clues: {}'.format(self.clues, givens))
         with open('puzzles/generated.sudoku', 'a') as f:
-            f.write(self.current_state(givens_only=True) + '\n')
+            f.write(givens + '\n')
