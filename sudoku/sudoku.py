@@ -3,16 +3,15 @@
 import curses
 
 import sys
-from random import shuffle
 import time
-from solvable import Square, ExclusiveSet
-from sudokuboard import (SudokuBoard, SudokuBoardSolver, SudokuBoardGenerator,
+from sudokuboard import (SudokuBoardSolver, SudokuBoardGenerator,
     N, N_2, N_4, MIN_CLUES, MAX_CLUES)
 
 COLOR_SELECTED = 10
 COLOR_SAME = 12
 COLOR_CONFLICT = 13
 COLOR_X = 11
+
 
 class Sudoku:
     def __init__(self, x_regions=False):
@@ -22,6 +21,8 @@ class Sudoku:
         self.undo_states = []
         self.redo_states = []
         self.steps = 0
+        self._computed_solution = None
+        self.show_all_conflicts = False
         self.board = SudokuBoardSolver(x_regions)
 
     def _get_blank_board_strings(self):
@@ -44,19 +45,27 @@ class Sudoku:
 
         return (value_width, horiz_sep, major_horiz_sep, blank_line)
 
-    def _get_square_color(self, square):
+    def _get_square_color(self, sq):
         conflicts = self.board.selected_square.conflict_squares()
-        if self.board.cursor_x == square.x and self.board.cursor_y == square.y:
+
+        if sq == self.board.selected_square:
             return COLOR_SELECTED
+        elif self.show_all_conflicts and self._computed_solution:
+            correct_value = int(
+                self._computed_solution[N_4 + sq.y * N_2 + sq.x])
+            if correct_value in sq.possible_values:
+                return COLOR_SAME
+            else:
+                return COLOR_CONFLICT
         elif (not self.board.selected_square.is_unknown() and
-              square in conflicts):
+              sq in conflicts):
             return COLOR_CONFLICT
-        elif (square.get_value() and
-              self.board.selected_square.get_value() == square.get_value()):
+        elif (sq.get_value() and
+              self.board.selected_square.get_value() == sq.get_value()):
             return COLOR_SAME
         elif (self.board.x_regions and
-              (square.x == square.y or
-               square.x == 9 - 1 - square.y)):
+              (sq.x == sq.y or
+               sq.x == 9 - 1 - sq.y)):
             return COLOR_X
         return 0
 
@@ -141,12 +150,9 @@ class Sudoku:
 
         for i in range(start_line_num, height - 1):
             line = str(self.board._log[-(height - i - 1)])
-        #while  < height - 1 and len(self.board._log) > i:
-            #line = str(self.board._log[-1 - i])
             if len(line) < width - N_4:
                 line += ' ' * (width - N_4 - len(line))
             self.stdscr.addstr(i, N_4, line[:(width - N_4)])
-            #i += 1
 
     def newgame(self, stdscr):
         self._init_colors()
@@ -174,17 +180,18 @@ class Sudoku:
     def help(self):
         self.board._log += [
             "Commands:",
-            "Arrow keys: move",
+            "Arrow keys/hjkl: move",
             "1-9: toggle number",
             "c: clear",
-            "s: toggle small board",
+            "C: Check board (toggle)",
+            "s: toggle Small board",
             "a: autosolve step",
-            "A: autosolve until pressed again",
+            "A: Autosolve until pressed again",
             "R: reset board",
             "f: fill in possible values (current sq)",
-            "F: fill in all possible values (board)",
+            "F: Fill in all possible values (board)",
             "w: save (write) current state",
-            "o: load last save",
+            "o: load (open) last save",
             "u: undo",
             "r: redo",
             "g: generate board until pressed again",
@@ -213,6 +220,9 @@ class Sudoku:
             self.board.selected_square.toggle_mark(int(key))
         elif key == 'c':
             self.board.selected_square.clear()
+        elif key == 'C':
+            self._compute_solution()
+            self.show_all_conflicts = not self.show_all_conflicts
         elif key == 's':
             self.draw_small = not self.draw_small
             self.stdscr.clear()
@@ -280,6 +290,7 @@ class Sudoku:
         elif key == 'x':
             self.board.set_x_regions(not self.board.x_regions)
         if self.board.current_state() != initial_state:
+            self.show_all_conflicts = False
             self.save_state(log=False)
             self.steps += 1
 
@@ -289,6 +300,25 @@ class Sudoku:
         if log:
             self.log("saved: " + state)
             self.saved_states.append(state)
+
+    def _compute_solution(self):
+        if self._computed_solution:
+            return self._computed_solution
+        solver = SudokuBoardSolver()
+        solver.load_game(self.board.current_state(givens_only=True))
+        self.log("Computing solution...")
+        last_status_clock = time.clock()
+        for msg in solver.solve_iter():
+            if time.clock() - last_status_clock > 1:
+                last_status_clock = time.clock()
+                self.log(msg, replace=True)
+                self.draw_board()
+        if not solver.is_solved():
+            self.log("Unsolvable puzzle!")
+            return None
+        self._computed_solution = solver.current_state(
+            include_possibles=False)
+        return self._computed_solution
 
     def _init_colors(self):
         curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
