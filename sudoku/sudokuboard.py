@@ -3,7 +3,7 @@ from random import shuffle
 import time
 from solvable import Square, ExclusiveSet
 
-MIN_CLUES = 17
+MIN_CLUES = 20
 MAX_CLUES = 24
 
 N = 3
@@ -13,6 +13,7 @@ N_4 = N_3 * N
 
 # TODO: allow increased/decreased verbosity?
 YIELD_ITERS = 500
+
 
 class SudokuBoard(object):
     def __init__(self, x_regions=False):

@@ -19,6 +19,7 @@ class Sudoku:
         self.start_time = time.clock()
         self.draw_small = False
         self.saved_states = []
+        self.undo_states = []
         self.redo_states = []
         self.steps = 0
         self.board = SudokuBoardSolver(x_regions)
@@ -234,7 +235,6 @@ class Sudoku:
                 self.log("Unsolvable!")
         elif key == 'R':
             self.log('resetting from: ' + self.board.current_state())
-            #self.board.load_game(self.board.original_state)
             self.board.load_game(self.board.current_state(givens_only=True, include_possibles=False))
         elif key == 'f':
             self.board.grid[self.board.cursor_y][self.board.cursor_x].infer_values()
@@ -244,15 +244,21 @@ class Sudoku:
                     square.infer_values()
         elif key == 'w':    # write
             self.save_state()
-        elif key == 'u':    # open
+        elif key == 'o':    # open
             if any(self.saved_states):
-                self.redo_states.append(initial_state)
                 new_state = self.saved_states.pop()
+                initial_state = new_state
+                self.board.load_game(new_state)
+                self.log('loaded: ' + new_state)
+        elif key == 'u':    # undo
+            if any(self.undo_states):
+                self.redo_states.append(initial_state)
+                new_state = self.undo_states.pop()
                 initial_state = new_state
                 self.board.load_game(new_state)
         elif key == 'r':
             if any(self.redo_states):
-                self.load_game(self.redo_states.pop())
+                self.board.load_game(self.redo_states.pop())
         elif key == 'g':    # generate
             self.stdscr.nodelay(True)
             self.board = SudokuBoardGenerator(self.board.x_regions)
@@ -278,9 +284,11 @@ class Sudoku:
             self.steps += 1
 
     def save_state(self, log=True):
-        self.saved_states.append(self.board.current_state())
+        state = self.board.current_state()
+        self.undo_states.append(state)
         if log:
-            self.log("saved: " + self.saved_states[-1])
+            self.log("saved: " + state)
+            self.saved_states.append(state)
 
     def _init_colors(self):
         curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
@@ -301,10 +309,18 @@ class Sudoku:
 
 def main():
     s = Sudoku(False)
-    game = sys.argv[1] if len(sys.argv) == 2 else None
+    game = sys.argv[1] if len(sys.argv) >= 2 else None
     s.board.load_game(game)
+
     try:
-        curses.wrapper(s.newgame)
+        if sys.argv[-1] in ('-s', '--solve'):
+            last_status_clock = time.clock()
+            for msg in s.board.solve_iter():
+                if time.clock() - last_status_clock > 1:
+                    last_status_clock = time.clock()
+                    print msg
+        else:
+            curses.wrapper(s.newgame)
     # except Exception as e:
     #     print repr(e)
     finally:
