@@ -1,4 +1,8 @@
-from random import shuffle
+
+N = 3
+N_2 = N * N
+N_3 = N_2 * N
+N_4 = N_3 * N
 
 
 class Square(object):
@@ -7,6 +11,7 @@ class Square(object):
         self.name = "({},{})".format(x, y)
         self.x = x
         self.y = y
+        self.id = y * N_2 + x
         self.is_given = False
         self._value = None
         self.sets = set()
@@ -183,8 +188,7 @@ class ExclusiveSet(object):
                 next(iter(sqs)).set_value(v)
                 return
 
-        # projection: if all of the squares including possible_value i are
-
+        # TODO: projection: if all of the squares including possible_value i are
 
     def add_square(self, square):
         self.squares.add(square)

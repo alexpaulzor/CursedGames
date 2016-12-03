@@ -1,22 +1,16 @@
-import sys
 from random import shuffle
 import time
-from solvable import Square, ExclusiveSet
+from solvable import Square, ExclusiveSet, N, N_2, N_4
 
 MIN_CLUES = 20
 MAX_CLUES = 24
-
-N = 3
-N_2 = N * N
-N_3 = N_2 * N
-N_4 = N_3 * N
 
 # TODO: allow increased/decreased verbosity?
 YIELD_ITERS = 500
 
 
 class SudokuBoard(object):
-    def __init__(self, x_regions=False):
+    def __init__(self):
         self.start_time = time.clock()
         self.grid = [[Square(x, y) for x in range(N_2)] for y in range(N_2)]
         self.sets = set()
@@ -24,7 +18,8 @@ class SudokuBoard(object):
         self.cursor_x = 0
         self.cursor_y = 0
         self.go_forward = True
-        self.x_regions = x_regions
+        self.x_regions = False
+        self.meta_regions = False
         self.original_state = None
         self.clues = 0
         self.saved_states = []
@@ -33,6 +28,7 @@ class SudokuBoard(object):
         self.build_columns()
         self.build_sectors()
         self.build_x_regions()
+        self.build_meta_regions()
 
     def load_game(self, line):
         """
@@ -40,6 +36,7 @@ class SudokuBoard(object):
             given values are 1-9 and spaces are .
 
             If the first character is 'x', enable x-regions.
+            If the first character is 'm', enable meta-regions.
 
             Optionally with another N_4 characters representing
             a solution or partial solution.
@@ -49,16 +46,20 @@ class SudokuBoard(object):
             For instance, a square with possible values 1, 3, and 9 would be
             2**(1-1) + 2**(3-1) + 2**(9-1) = 261
         """
-
         if not line:
-            line = 'x' + '.' * N_4
+            line = '.' * N_4
         if not self.original_state:
             self.original_state = line
         if 'x' in line:
             self.set_x_regions(True)
-            line = line[1:]
+            line = line.translate(None, 'x')
         else:
             self.set_x_regions(False)
+        if 'm' in line:
+            self.set_meta_regions(True)
+            line = line.translate(None, 'm')
+        else:
+            self.set_meta_regions(False)
         if len(line) not in (N_4, 2 * N_4, 5 * N_4):
             self.log("Invalid line: {} ({} ch)".format(line, len(line)))
             raise RuntimeError(
@@ -94,7 +95,9 @@ class SudokuBoard(object):
 
     def current_state(self, givens_only=False, include_possibles=True):
         # return the state of the board as would be loaded
-        line = 'x' if self.x_regions else u''
+        line = ''
+        line += 'x' if self.x_regions else ''
+        line += 'm' if self.meta_regions else ''
         line2 = ''
         line3 = ''
         for y in range(N_2):
@@ -198,6 +201,31 @@ class SudokuBoard(object):
         self.x_regions = enable_x_regions
         self.x_down.set_enabled(self.x_regions)
         self.x_up.set_enabled(self.x_regions)
+
+    def build_meta_regions(self):
+        self.meta_0 = ExclusiveSet('meta_0', enabled=self.meta_regions)
+        self.meta_1 = ExclusiveSet('meta_1', enabled=self.meta_regions)
+        self.meta_2 = ExclusiveSet('meta_2', enabled=self.meta_regions)
+        self.meta_3 = ExclusiveSet('meta_3', enabled=self.meta_regions)
+
+        for dx in range(N):
+            for dy in range(N):
+                self.meta_0.add_square(self.grid[1+dy][1+dx])
+                self.meta_1.add_square(self.grid[1+dy][5+dx])
+                self.meta_2.add_square(self.grid[5+dy][1+dx])
+                self.meta_3.add_square(self.grid[5+dy][5+dx])
+
+        self.sets.add(self.meta_0)
+        self.sets.add(self.meta_1)
+        self.sets.add(self.meta_2)
+        self.sets.add(self.meta_3)
+
+    def set_meta_regions(self, enable_meta_regions):
+        self.meta_regions = enable_meta_regions
+        self.meta_0.set_enabled(self.meta_regions)
+        self.meta_1.set_enabled(self.meta_regions)
+        self.meta_2.set_enabled(self.meta_regions)
+        self.meta_3.set_enabled(self.meta_regions)
 
     @property
     def selected_square(self):
@@ -359,11 +387,11 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             return
 
         def given_str(givens):
-            return ('x' if self.x_regions else '') + ''.join(givens)
+            return (('x' if self.x_regions else '') +
+                    ('m' if self.meta_regions else '') +
+                    ''.join(givens))
 
-        givens = list(solution)
-        if self.x_regions:
-            givens = givens[1:]
+        givens = list(solution.translate(None, 'xm'))
         givens = ['.'] * N_4 + givens[81:]
         all_squares = reduce(lambda l, row: l + row, self.grid, [])
         shuffle(all_squares)
@@ -388,8 +416,8 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             msg = 'gen: [{} togo / {} clues] gen trying without: {}'.format(
                 len(all_squares), len(given_squares), str(sq))
             self.log(msg)
-            givens[N_2 * sq.y + sq.x] = '.'
-            givens[81 + 9 * sq.y + sq.x] = '.'
+            givens[sq.id] = '.'
+            givens[N_4 + sq.id] = '.'
 
             self.load_game(given_str(givens[81:]))
             for msg in self.solve_iter():
@@ -403,8 +431,8 @@ class SudokuBoardGenerator(SudokuBoardSolver):
                     sq, len(given_squares))
                 self.log(msg)
                 sq.set_value(sq_val, True)
-                givens[N_2 * sq.y + sq.x] = str(sq_val)
-                givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
+                givens[sq.id] = str(sq_val)
+                givens[N_4 + sq.id] = str(sq_val)
 
             else:
                 # can remove this square
@@ -414,14 +442,14 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             self.load_game(given_str(givens))
             yield "ggg"
         self.log('gen: Done! ' + given_str(givens[:81]))
-        while len(given_squares) > MIN_CLUES:
+        while any(all_squares) and len(given_squares) < MAX_CLUES:
             sq = all_squares.pop()
             sq_val = sq.get_value()
             if not sq_val:
                 continue
             sq.set_value(sq_val, True)
-            givens[N_2 * sq.y + sq.x] = str(sq_val)
-            givens[81 + N_2 * sq.y + sq.x] = str(sq_val)
+            givens[sq.id] = str(sq_val)
+            givens[N_4 + sq.id] = str(sq_val)
             given_squares.add(sq)
         self.load_game(given_str(givens))
         if MIN_CLUES <= self.clues <= MAX_CLUES:

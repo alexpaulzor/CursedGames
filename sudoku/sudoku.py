@@ -4,17 +4,17 @@ import curses
 
 import sys
 import time
-from sudokuboard import (SudokuBoardSolver, SudokuBoardGenerator,
-    N, N_2, N_4, MIN_CLUES, MAX_CLUES)
+from sudokuboard import SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4
 
 COLOR_SELECTED = 10
 COLOR_SAME = 12
 COLOR_CONFLICT = 13
 COLOR_X = 11
+COLOR_META = 14
 
 
 class Sudoku:
-    def __init__(self, x_regions=False):
+    def __init__(self):
         self.start_time = time.clock()
         self.draw_small = False
         self.saved_states = []
@@ -23,7 +23,7 @@ class Sudoku:
         self.steps = 0
         self._computed_solution = None
         self.show_all_conflicts = False
-        self.board = SudokuBoardSolver(x_regions)
+        self.board = SudokuBoardSolver()
 
     def _get_blank_board_strings(self):
         if self.draw_small:
@@ -52,7 +52,7 @@ class Sudoku:
             return COLOR_SELECTED
         elif self.show_all_conflicts and self._computed_solution:
             correct_value = int(
-                self._computed_solution[N_4 + sq.y * N_2 + sq.x])
+                self._computed_solution[sq.id - N_4])
             if correct_value in sq.possible_values:
                 return COLOR_SAME
             else:
@@ -67,6 +67,15 @@ class Sudoku:
               (sq.x == sq.y or
                sq.x == 9 - 1 - sq.y)):
             return COLOR_X
+        elif (self.board.meta_regions and
+              sq.x not in (0, N_2 / 2, N_2 - 1) and
+              sq.y not in (0, N_2 / 2, N_2 - 1)):
+            return COLOR_META
+        # elif self.board.meta_regions:
+        #     for s in (self.board.meta_0, self.board.meta_1, self.board.meta_2,
+        #               self.board.meta_3):
+        #         if sq in s.squares:
+        #             return COLOR_META
         return 0
 
     def draw_board(self):
@@ -196,6 +205,7 @@ class Sudoku:
             "r: redo",
             "g: generate board until pressed again",
             "x: toggle x regions",
+            "m: toggle meta regions",
             "H: this help",
             "q: quit"
         ]
@@ -245,9 +255,10 @@ class Sudoku:
                 self.log("Unsolvable!")
         elif key == 'R':
             self.log('resetting from: ' + self.board.current_state())
-            self.board.load_game(self.board.current_state(givens_only=True, include_possibles=False))
+            self.board.load_game(self.board.current_state(
+                givens_only=True, include_possibles=False))
         elif key == 'f':
-            self.board.grid[self.board.cursor_y][self.board.cursor_x].infer_values()
+            self.board.selected_square.infer_values()
         elif key == 'F':
             for row in self.board.grid:
                 for square in row:
@@ -271,7 +282,9 @@ class Sudoku:
                 self.board.load_game(self.redo_states.pop())
         elif key == 'g':    # generate
             self.stdscr.nodelay(True)
-            self.board = SudokuBoardGenerator(self.board.x_regions)
+            start = self.board.current_state(include_possibles=False)
+            self.board = SudokuBoardGenerator()
+            self.board.load_game(start)
             gi = self.board.generate_iter()
             self.log(next(gi))
             last_status_clock = time.clock()
@@ -289,6 +302,8 @@ class Sudoku:
             self.help()
         elif key == 'x':
             self.board.set_x_regions(not self.board.x_regions)
+        elif key == 'm':
+            self.board.set_meta_regions(not self.board.meta_regions)
         if self.board.current_state() != initial_state:
             self.show_all_conflicts = False
             self.save_state(log=False)
@@ -335,10 +350,11 @@ class Sudoku:
         curses.init_pair(COLOR_SAME, curses.COLOR_BLACK, curses.COLOR_CYAN)
         curses.init_pair(COLOR_CONFLICT, curses.COLOR_BLACK, curses.COLOR_RED)
         curses.init_pair(COLOR_X, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        curses.init_pair(COLOR_META, curses.COLOR_WHITE, curses.COLOR_MAGENTA)
 
 
 def main():
-    s = Sudoku(False)
+    s = Sudoku()
     game = sys.argv[1] if len(sys.argv) >= 2 else None
     s.board.load_game(game)
 
