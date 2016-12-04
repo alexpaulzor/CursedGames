@@ -173,20 +173,47 @@ class ExclusiveSet(object):
         return False
 
     def try_solve(self):
+        for msg in self.try_solve_iter():
+            pass
+
+    def try_solve_iter(self, verbose=False):
         if not self.enabled or self.is_solved():
             return
         known_values = self.known_values()
         # value -> set(squares possibly that value)
         possibles = {i: set() for i in range(1, 10)}
+        solved_pairs = set()
         for sq in self.squares:
             for v in sq.possible_values:
                 possibles[v].add(sq)
+            # naked pairs
+            if len(sq.possible_values) == 2 and sq not in solved_pairs:
+                for msg in self._solve_naked_pairs(sq, solved_pairs,
+                                                   verbose=verbose):
+                    if verbose:
+                        yield msg
 
         for v, sqs in possibles.iteritems():
             # If there's only one square with a given possible_value, solved!
             if v not in known_values and len(sqs) == 1:
-                next(iter(sqs)).set_value(v)
-                return
+                sq = next(iter(sqs))
+                sq.set_value(v)
+                if verbose:
+                    yield "solved unique value: {}".format(sq)
+
+    def _solve_naked_pairs(self, sq, solved_pairs, verbose=False):
+        for sq2 in self.squares - solved_pairs:
+            if sq == sq2 or sq.possible_values != sq2.possible_values:
+                continue
+            for sq_set in (sq.sets & sq2.sets):
+                for sq3 in sq_set.squares:
+                    if sq3 != sq and sq3 != sq2:
+                        sq3.set_possible_values(
+                            sq3.possible_values - sq.possible_values)
+            solved_pairs.add(sq)
+            solved_pairs.add(sq2)
+            if verbose:
+                yield "solve naked pair {} + {}".format(sq.name, sq2.name)
 
         # TODO: projection: if all of the squares including possible_value i are
 

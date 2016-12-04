@@ -264,20 +264,25 @@ class SudokuBoardSolver(SudokuBoard):
         """return truthy if progress was made"""
         prev_state = self.current_state()
         # self.log("infer_values...")
+
+        for msg in self.solve_step_iter():
+            pass
+
+        return self.current_state() != prev_state
+
+    def solve_step_iter(self, verbose=False):
         for row in self.grid:
             for sq in row:
                 sq.infer_values()
-        if self.current_state() != prev_state:
-            return True
-        # self.log("try_solve...")
+        if verbose:
+            yield "Infer values"
         for s in self.sets:
-            s.try_solve()
-        if self.current_state() != prev_state:
-            return True
-        # self.log("solve_naked_groups...")
-        self.solve_naked_groups()
+            for msg in s.try_solve_iter(verbose=verbose):
+                if verbose:
+                    yield msg
+        if verbose:
+            yield "try_solve"
 
-        return self.current_state() != prev_state
 
     def solve_naked_groups(self):
         """find groups of 2 or 3 of values in the same set
@@ -306,8 +311,12 @@ class SudokuBoardSolver(SudokuBoard):
         (123) (12) (23) - {3/2/2/}
         (12) (23) (13) - {2/2/2}
         """
-        for s in self.sets:
-            pass
+
+    # def solve_naked_pairs(self):
+    #     for s in self.sets:
+    #         for sq in s.squares:
+    #             if len(sq.possible_values) != 2:
+    #                 continue
 
     def hidden_groups(self):
         """ """
@@ -442,7 +451,7 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             self.load_game(given_str(givens))
             yield "ggg"
         self.log('gen: Done! ' + given_str(givens[:81]))
-        while any(all_squares) and len(given_squares) < MAX_CLUES:
+        while any(all_squares):
             sq = all_squares.pop()
             sq_val = sq.get_value()
             if not sq_val:

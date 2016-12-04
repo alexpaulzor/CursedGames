@@ -48,15 +48,15 @@ class Sudoku:
     def _get_square_color(self, sq):
         conflicts = self.board.selected_square.conflict_squares()
 
-        if sq == self.board.selected_square:
-            return COLOR_SELECTED
-        elif self.show_all_conflicts and self._computed_solution:
+        if self.show_all_conflicts and self._computed_solution:
             correct_value = int(
                 self._computed_solution[sq.id - N_4])
             if correct_value in sq.possible_values:
                 return COLOR_SAME
             else:
                 return COLOR_CONFLICT
+        elif sq == self.board.selected_square:
+            return COLOR_SELECTED
         elif (not self.board.selected_square.is_unknown() and
               sq in conflicts):
             return COLOR_CONFLICT
@@ -206,6 +206,7 @@ class Sudoku:
             "g: generate board until pressed again",
             "x: toggle x regions",
             "m: toggle meta regions",
+            ".: step through solver",
             "H: this help",
             "q: quit"
         ]
@@ -238,6 +239,33 @@ class Sudoku:
             self.stdscr.clear()
         elif key == 'a':
             self.board.solve_step()
+        elif key == '.':
+            self.stdscr.nodelay(False)
+            wait = None
+            last_state = self.board.current_state()
+            last_msg_ineffective = False
+            step_msgs = self.board.solve_step_iter(verbose=True)
+            for msg in step_msgs:
+
+                state = self.board.current_state()
+                if state == last_state:
+                    msg += '...ineffective'
+                    self.log(msg, replace=last_msg_ineffective)
+                    last_msg_ineffective = True
+                else:
+                    msg += '...success!'
+                    self.log(msg)
+                    last_msg_ineffective = False
+                    if wait:
+                        key = self.stdscr.getkey()
+                        if key != '.':
+                            wait = False
+                    elif wait is None:
+                        wait = True
+                last_state = state
+
+                self.draw_board()
+
         elif key == 'A':
             self.stdscr.nodelay(True)
             last_status_clock = time.clock()
