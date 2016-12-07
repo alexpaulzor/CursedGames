@@ -5,6 +5,7 @@ import curses
 import sys
 import time
 from sudokuboard import SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4
+import threading
 
 COLOR_SELECTED = 10
 COLOR_SAME = 12
@@ -49,13 +50,10 @@ class Sudoku:
         conflicts = self.board.selected_square.conflict_squares()
 
         if self.show_all_conflicts and self._computed_solution:
-            correct_value = int(
-                self._computed_solution[sq.id - N_4])
-            if correct_value in sq.possible_values:
-                return COLOR_SAME
-            else:
+            correct_value = int(self._computed_solution[sq.id - N_4])
+            if correct_value not in sq.possible_values:
                 return COLOR_CONFLICT
-        elif sq == self.board.selected_square:
+        if sq == self.board.selected_square:
             return COLOR_SELECTED
         elif (not self.board.selected_square.is_unknown() and
               sq in conflicts):
@@ -215,6 +213,7 @@ class Sudoku:
     def log(self, msg, replace=False):
         self.board.log(msg, replace=replace)
 
+
     def _handle_key(self, key):
         initial_state = self.board.current_state()
         if (key == 'KEY_LEFT' or key == 'h'):
@@ -232,40 +231,16 @@ class Sudoku:
         elif key == 'c':
             self.board.selected_square.clear()
         elif key == 'C':
-            self._compute_solution()
-            self.show_all_conflicts = not self.show_all_conflicts
+            thread = threading.Thread(target=self._toggle_conflicts, args=())
+            thread.daemon = True
+            thread.start()
         elif key == 's':
             self.draw_small = not self.draw_small
             self.stdscr.clear()
         elif key == 'a':
             self.board.solve_step()
         elif key == '.':
-            self.stdscr.nodelay(False)
-            wait = None
-            last_state = self.board.current_state()
-            last_msg_ineffective = False
-            step_msgs = self.board.solve_step_iter(verbose=True)
-            for msg in step_msgs:
-
-                state = self.board.current_state()
-                if state == last_state:
-                    msg += '...ineffective'
-                    self.log(msg, replace=last_msg_ineffective)
-                    last_msg_ineffective = True
-                else:
-                    msg += '...success!'
-                    self.log(msg)
-                    last_msg_ineffective = False
-                    if wait:
-                        key = self.stdscr.getkey()
-                        if key != '.':
-                            wait = False
-                    elif wait is None:
-                        wait = True
-                last_state = state
-
-                self.draw_board()
-
+            self._solve_step_slowly()
         elif key == 'A':
             self.stdscr.nodelay(True)
             last_status_clock = time.clock()
@@ -333,9 +308,37 @@ class Sudoku:
         elif key == 'm':
             self.board.set_meta_regions(not self.board.meta_regions)
         if self.board.current_state() != initial_state:
-            self.show_all_conflicts = False
             self.save_state(log=False)
             self.steps += 1
+
+    def _solve_step_slowly(self):
+        if self.board.is_solved():
+            self.log('Solved!')
+            return
+        self.stdscr.nodelay(False)
+        wait = None
+        last_state = self.board.current_state()
+        last_msg_ineffective = False
+        step_msgs = self.board.solve_step_iter(last_state, verbose=True)
+        for msg in step_msgs:
+            state = self.board.current_state()
+            if state == last_state:
+                msg += '...ineffective'
+                self.log(msg, replace=last_msg_ineffective)
+                last_msg_ineffective = True
+            else:
+                msg += '...success!'
+                self.log(msg)
+                last_msg_ineffective = False
+                if wait:
+                    key = self.stdscr.getkey()
+                    if key != '.':
+                        wait = False
+                elif wait is None:
+                    wait = True
+            last_state = state
+
+            self.draw_board()
 
     def save_state(self, log=True):
         state = self.board.current_state()
@@ -363,6 +366,12 @@ class Sudoku:
             include_possibles=False)
         return self._computed_solution
 
+    def _toggle_conflicts(self):
+        self._compute_solution()
+        self.show_all_conflicts = not self.show_all_conflicts
+        if self.show_all_conflicts:
+            self.log("Checking solution...")
+
     def _init_colors(self):
         curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
         curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
@@ -381,28 +390,46 @@ class Sudoku:
         curses.init_pair(COLOR_META, curses.COLOR_WHITE, curses.COLOR_MAGENTA)
 
 
+def console_solve(board, verbose=True, allow_bruteforce=False):
+    prev_state = None
+    while board.current_state() != prev_state:
+        prev_state = board.current_state()
+        for msg in board.solve_step_iter(prev_state, verbose=True):
+            print msg
+    if not board.is_solved() and allow_bruteforce:
+        print "Bruteforcing..."
+        last_status_clock = time.clock()
+        for msg in board.solve_iter():
+            if time.clock() - last_status_clock > 1:
+                last_status_clock = time.clock()
+                print msg
+
+
 def main():
     s = Sudoku()
     game = sys.argv[1] if len(sys.argv) >= 2 else None
+    verbose = ('-v' in sys.argv)
+    solve_only = ('-s' in sys.argv or '--solve' in sys.argv)
+    allow_bruteforce = ('-b' in sys.argv)
     s.board.load_game(game)
 
     try:
-        if sys.argv[-1] in ('-s', '--solve'):
-            last_status_clock = time.clock()
-            for msg in s.board.solve_iter():
-                if time.clock() - last_status_clock > 1:
-                    last_status_clock = time.clock()
-                    print msg
+        if solve_only:
+            console_solve(s.board, verbose=verbose,
+                          allow_bruteforce=allow_bruteforce)
         else:
             curses.wrapper(s.newgame)
     # except Exception as e:
     #     print repr(e)
     finally:
         print "\n".join(s.board._log)
-        print s.board.original_state
-        print s.board.current_state()
+        print "initial: " + s.board.original_state
+        print "final: " + s.board.current_state()
         if s.board.is_solved():
             print "You won!"
+        else:
+            print "Unsolved ({} remaining)".format(
+                len(list(s.board.unsolved_squares())))
         print "({} clues, {} steps)".format(s.board.clues, s.steps)
 
 if __name__ == "__main__":

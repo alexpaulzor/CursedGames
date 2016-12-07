@@ -14,15 +14,19 @@ class Square(object):
         self.id = y * N_2 + x
         self.is_given = False
         self._value = None
-        self.sets = set()
+        self._sets = set()
         self.solved = False
         self.visited = False
         self.changed = False
         self.prevent_value(None)
         self.clear()
 
+    @property
+    def enabled_sets(self):
+        return set([s for s in self._sets if s.enabled])
+
     def add_set(self, s):
-        self.sets.add(s)
+        self._sets.add(s)
 
     def clear(self):
         if not self.is_given:
@@ -37,9 +41,7 @@ class Square(object):
             return
         self.visited = True
         self.infer_values()
-        for s in self.sets:
-            if not s.enabled:
-                continue
+        for s in self.enabled_sets:
             s.try_solve()
         self.infer_values()
         self.visited = False
@@ -60,6 +62,8 @@ class Square(object):
         self.prevented_value = value
         self.clear()
         self.reset_values_to_attempt()
+        if self.prevented_value in self.possible_values:
+            self.possible_values.remove(self.prevented_value)
 
     def reset_values_to_attempt(self):
         if self.is_given:
@@ -110,9 +114,7 @@ class Square(object):
         sqs = set()
         if self.is_unknown():
             return sqs
-        for s in self.sets:
-            if not s.enabled:
-                continue
+        for s in self.enabled_sets:
             for square in s.squares:
                 if not square.is_unknown() and square != self:
                     sv = square.get_value()
@@ -128,9 +130,7 @@ class Square(object):
 
     def _inferred_possible_values(self):
         possible_values = set(range(1, 10))
-        for s in self.sets:
-            if not s.enabled:
-                continue
+        for s in self.enabled_sets:
             for square in s.squares:
                 if square != self and square.get_value() in possible_values:
                     possible_values.remove(square.get_value())
@@ -162,7 +162,8 @@ class ExclusiveSet(object):
     def known_values(self):
         if not self.enabled:
             return set()
-        return set(map(lambda s: s.get_value(), self.squares))
+        vals = map(lambda s: s.get_value(), self.squares)
+        return set([v for v in vals if v is not None])
 
     def is_solved(self):
         if self.solved or not self.enabled:
@@ -194,18 +195,24 @@ class ExclusiveSet(object):
                         yield msg
 
         for v, sqs in possibles.iteritems():
+            if v in known_values:
+                continue
             # If there's only one square with a given possible_value, solved!
-            if v not in known_values and len(sqs) == 1:
+            if len(sqs) == 1:
                 sq = next(iter(sqs))
                 sq.set_value(v)
                 if verbose:
                     yield "solved unique value: {}".format(sq)
+            elif any(sqs):
+                for msg in self._eliminate_via_projection(v, sqs,
+                                                          verbose=verbose):
+                    yield msg
 
     def _solve_naked_pairs(self, sq, solved_pairs, verbose=False):
         for sq2 in self.squares - solved_pairs:
             if sq == sq2 or sq.possible_values != sq2.possible_values:
                 continue
-            for sq_set in (sq.sets & sq2.sets):
+            for sq_set in (sq.enabled_sets & sq2.enabled_sets):
                 for sq3 in sq_set.squares:
                     if sq3 != sq and sq3 != sq2:
                         sq3.set_possible_values(
@@ -215,7 +222,36 @@ class ExclusiveSet(object):
             if verbose:
                 yield "solve naked pair {} + {}".format(sq.name, sq2.name)
 
-        # TODO: projection: if all of the squares including possible_value i are
+    def _eliminate_via_projection(self, value, squares_with_value, verbose=False):
+        """projection: if all of the squares including possible_value i within
+        this set also share other sets S, we can remove i from the
+        possible_values for all squares in all S except for those in this set.
+        """
+        if not any(squares_with_value):
+            raise RuntimeError("No squares in {} with value {}!".format(
+                self, value))
+        all_sq_sets = [sq.enabled_sets for sq in squares_with_value]
+        overlapping_sets = all_sq_sets[0].intersection(*all_sq_sets)
+
+        if self not in overlapping_sets:
+            raise RuntimeError("self {} should be in {}".format(self,
+                overlapping_sets))
+        overlapping_sets.remove(self)
+        if not any(overlapping_sets):
+            return
+        all_overlapping_squares = [s.squares for s in overlapping_sets]
+        overlapping_squares = all_overlapping_squares[0].intersection(
+            *all_overlapping_squares) - self.squares
+        if not any(overlapping_squares):
+            return
+        toggled_squares = 0
+        for sq in overlapping_squares:
+            if value in sq.possible_values:
+                sq.toggle_mark(value)
+                toggled_squares += 1
+        if verbose and toggled_squares > 0:
+            yield "project {} in {} to {} other sets ({} squares)".format(
+                value, self, len(overlapping_sets), toggled_squares)
 
     def add_square(self, square):
         self.squares.add(square)

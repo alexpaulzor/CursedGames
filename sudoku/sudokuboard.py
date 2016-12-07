@@ -2,7 +2,7 @@ from random import shuffle
 import time
 from solvable import Square, ExclusiveSet, N, N_2, N_4
 
-MIN_CLUES = 20
+MIN_CLUES = 19
 MAX_CLUES = 24
 
 # TODO: allow increased/decreased verbosity?
@@ -75,10 +75,10 @@ class SudokuBoard(object):
                     val = int(char)
                     sq.set_value(val, given=True)
                     self.clues += 1
-                elif len(line) == 2 * N_4 and line[N_4 + y * N_2 + x] != '.':
+                elif len(line) >= 2 * N_4 and line[N_4 + y * N_2 + x] != '.':
                     val = int(line[N_4 + y * N_2 + x])
                     self.grid[y][x].set_value(val, given=False)
-                elif len(line) == 5 * N_4:
+                elif len(line) >= 5 * N_4:
                     mask_start = 2 * N_4 + 3 * (y * N_2 + x)
                     mask_str = line[mask_start:mask_start+3]
                     if mask_str == '...':
@@ -114,6 +114,9 @@ class SudokuBoard(object):
                     line2 += '.'
                 if sq.is_unknown():
                     line3 += '...'
+                elif sq.get_value():
+                    line3 += '.' + str(sq.get_value()) + (
+                        'g' if sq.is_given else '.')
                 else:
                     line3 += '{:03d}'.format(self._possible_value_mask(sq))
         if givens_only:
@@ -127,6 +130,18 @@ class SudokuBoard(object):
         for i in sq.possible_values:
             mask += 2**(i - 1)
         return mask
+
+    def unsolved_squares(self):
+        for row in self.grid:
+            for sq in row:
+                if not sq.is_solved():
+                    yield sq
+
+    def freeze_known_as_givens(self):
+        for row in self.grid:
+            for sq in row:
+                if sq.get_value():
+                    sq.set_value(sq.get_value(), given=True)
 
     def log(self, message, replace=False):
         dt = time.clock() - self.start_time
@@ -249,11 +264,14 @@ class SudokuBoardSolver(SudokuBoard):
         while not self.is_solved():
             if not self.solve_step():
                 break
-            # TODO: catch keyboardinterrupt
         if self.is_solved():
             return
-        self.log("No more progress from solve_step, bruteforcing...")
-
+        self.log("No more progress from solve_step, "
+                 "freezing known values and bruteforcing...")
+        self.freeze_known_as_givens()
+        for row in self.grid:
+            for sq in row:
+                sq.clear()
         start_square = self.selected_square
         for msg in self.bruteforce_iter():
             yield msg
@@ -265,61 +283,25 @@ class SudokuBoardSolver(SudokuBoard):
         prev_state = self.current_state()
         # self.log("infer_values...")
 
-        for msg in self.solve_step_iter():
+        for msg in self.solve_step_iter(prev_state):
             pass
 
         return self.current_state() != prev_state
 
-    def solve_step_iter(self, verbose=False):
+    def solve_step_iter(self, prev_state, verbose=False):
         for row in self.grid:
             for sq in row:
                 sq.infer_values()
         if verbose:
-            yield "Infer values"
+            yield "Infer values complete"
+        if self.current_state() != prev_state:
+            return
         for s in self.sets:
             for msg in s.try_solve_iter(verbose=verbose):
                 if verbose:
                     yield msg
         if verbose:
-            yield "try_solve"
-
-
-    def solve_naked_groups(self):
-        """find groups of 2 or 3 of values in the same set
-        and remove that group from the rest of the squares in that set
-
-        A Naked Pair (also known as a Conjugate Pair) is a set of two candidate
-        numbers sited in two cells that belong to at least one unit in common.
-        That is, they reside in the same row, column or box.
-        It is clear that the solution will contain those values in those two
-        cells, and all other candidates with those numbers can be removed from
-        whatever unit(s) they have in common.
-
-        Naked Triple:
-        Any group of three cells in the same unit that contain IN TOTAL three
-        candidates is a Naked Triple.
-        Each cell can have two or three numbers, as long as in combination all
-        three cells have only three numbers.
-        When this happens, the three candidates can be removed from all other
-        cells in the same unit.
-
-        The combinations of candidates for a Naked Triple will be one of the
-        following:
-
-        (123) (123) (123) - {3/3/3} (in terms of candidates per cell)
-        (123) (123) (12) - {3/3/2} (or some combination thereof)
-        (123) (12) (23) - {3/2/2/}
-        (12) (23) (13) - {2/2/2}
-        """
-
-    # def solve_naked_pairs(self):
-    #     for s in self.sets:
-    #         for sq in s.squares:
-    #             if len(sq.possible_values) != 2:
-    #                 continue
-
-    def hidden_groups(self):
-        """ """
+            yield "try_solve complete"
 
     def bruteforce_iter(self):
         start_square = self.selected_square
@@ -470,5 +452,5 @@ class SudokuBoardGenerator(SudokuBoardSolver):
     def write_to_generated_log(self):
         givens = self.current_state(givens_only=True)
         self.log('saving with {} clues: {}'.format(self.clues, givens))
-        with open('puzzles/generated.sudoku', 'a') as f:
+        with open('puzzles/generated.sudoku.txt', 'a') as f:
             f.write(givens + '\n')
