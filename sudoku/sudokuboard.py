@@ -10,7 +10,7 @@ YIELD_ITERS = 500
 
 
 class SudokuBoard(object):
-    def __init__(self):
+    def __init__(self, x_regions=False, meta_regions=False):
         self.start_time = time.clock()
         self.grid = [[Square(x, y) for x in range(N_2)] for y in range(N_2)]
         self.sets = set()
@@ -18,8 +18,8 @@ class SudokuBoard(object):
         self.cursor_x = 0
         self.cursor_y = 0
         self.go_forward = True
-        self.x_regions = False
-        self.meta_regions = False
+        self.x_regions = x_regions
+        self.meta_regions = meta_regions
         self.original_state = None
         self.clues = 0
         self.saved_states = []
@@ -137,12 +137,6 @@ class SudokuBoard(object):
                 if not sq.is_solved():
                     yield sq
 
-    def freeze_known_as_givens(self):
-        for row in self.grid:
-            for sq in row:
-                if sq.get_value():
-                    sq.set_value(sq.get_value(), given=True)
-
     def log(self, message, replace=False):
         dt = time.clock() - self.start_time
         message = '[{:02d}:{:02d}] {}'.format(
@@ -248,6 +242,14 @@ class SudokuBoard(object):
 
 
 class SudokuBoardSolver(SudokuBoard):
+    def freeze_known_or_clear(self):
+        for row in self.grid:
+            for sq in row:
+                if sq.get_value():
+                    sq.set_value(sq.get_value(), given=True)
+                else:
+                    sq.clear()
+
     def solve_iter(self):
         """Solve, no matter what."""
 
@@ -266,12 +268,11 @@ class SudokuBoardSolver(SudokuBoard):
                 break
         if self.is_solved():
             return
-        self.log("No more progress from solve_step, "
-                 "freezing known values and bruteforcing...")
-        self.freeze_known_as_givens()
-        for row in self.grid:
-            for sq in row:
-                sq.clear()
+        inferred_state = self.current_state()
+        #self.freeze_known_or_clear()
+        self.log("No more progress from solve_step: " + inferred_state)
+        self.log("freezing known values and bruteforcing..." +
+                 self.current_state())
         start_square = self.selected_square
         for msg in self.bruteforce_iter():
             yield msg
@@ -396,25 +397,27 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             sq = all_squares.pop()
             # Pick a random square that is not uncertain
             while any(all_squares) and (sq.is_given or not sq.get_value()):
+                self.log("gen: skipping {}".format(sq))
                 sq = all_squares.pop()
             if not any(all_squares) or (
                     len(all_squares) + len(given_squares) <= MIN_CLUES):
+                self.log("gen: as: {!r} gs: {!r}".format(all_squares, given_squares))
                 break
             self.cursor_x = sq.x
             self.cursor_y = sq.y
             sq_val = sq.get_value()
             sq.prevent_value(sq_val)
-            msg = 'gen: [{} togo / {} clues] gen trying without: {}'.format(
-                len(all_squares), len(given_squares), str(sq))
+            msg = 'gen: [{} togo / {} clues] trying with {} != {}'.format(
+                len(all_squares), len(given_squares), str(sq), sq_val)
             self.log(msg)
             givens[sq.id] = '.'
             givens[N_4 + sq.id] = '.'
-
+            self.log("gen: loading " + given_str(givens[81:]))
             self.load_game(given_str(givens[81:]))
             for msg in self.solve_iter():
-                yield msg
+                yield 'gen: ' + msg
             sq.prevent_value(None)
-            if self.is_solved() and self.current_state() != solution:
+            if self.is_solved() and self.current_state(include_possibles=False) != solution:
                 # can't remove this square, since it's unsolvable
                 # or solvable another way without it
                 given_squares.add(sq)
@@ -427,11 +430,14 @@ class SudokuBoardGenerator(SudokuBoardSolver):
 
             else:
                 # can remove this square
-                msg = "gen: removing {}".format(sq)
+                sq.is_given = False
+                sq.clear()
+                sq.reset_values_to_attempt()
+                msg = "gen: unsolvable unless {}={}, removing".format(sq, sq_val)
                 self.log(msg)
-
+            self.log("gen: loading " + given_str(givens))
             self.load_game(given_str(givens))
-            yield "ggg"
+
         self.log('gen: Done! ' + given_str(givens[:81]))
         while any(all_squares):
             sq = all_squares.pop()
@@ -442,7 +448,8 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             givens[sq.id] = str(sq_val)
             givens[N_4 + sq.id] = str(sq_val)
             given_squares.add(sq)
-        self.load_game(given_str(givens))
+        self.log("gen: loading " + given_str(givens[:81]))
+        self.load_game(given_str(givens[:81]))
         if MIN_CLUES <= self.clues <= MAX_CLUES:
             self.write_to_generated_log()
         else:

@@ -4,11 +4,12 @@ N_2 = N * N
 N_3 = N_2 * N
 N_4 = N_3 * N
 
+ROW_LETTERS = 'ABCDEFGHI'
 
 class Square(object):
     def __init__(self, x, y):
         super(Square, self).__init__()
-        self.name = "({},{})".format(x, y)
+        self.name = "{}{}".format(ROW_LETTERS[x], y)
         self.x = x
         self.y = y
         self.id = y * N_2 + x
