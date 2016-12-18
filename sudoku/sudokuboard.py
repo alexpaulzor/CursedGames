@@ -415,7 +415,7 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             self.log("gen: loading " + given_str(givens[81:]))
             self.load_game(given_str(givens[81:]))
             for msg in self.solve_iter():
-                yield 'gen: ' + msg
+                yield msg
             sq.prevent_value(None)
             if self.is_solved() and self.current_state(include_possibles=False) != solution:
                 # can't remove this square, since it's unsolvable

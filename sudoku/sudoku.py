@@ -23,7 +23,7 @@ def cli():
 def play(load, x_regions, meta_regions, verbose):
     s = SudokuDisplay(x_regions, meta_regions)
     if load:
-        s.board.load_game(load)
+        s.board.load_game(str(load))
 
     try:
         curses.wrapper(s.newgame)
@@ -40,6 +40,8 @@ def play(load, x_regions, meta_regions, verbose):
                 len(list(s.board.unsolved_squares())))
         print "({} clues, {} steps)".format(s.board.clues, s.steps)
 
+def log(msg, replace=False):
+    print msg
 
 @cli.command()
 @click.option('-x', '--x-regions', is_flag=True)
@@ -47,8 +49,15 @@ def play(load, x_regions, meta_regions, verbose):
 @click.option('-v', '--verbose', is_flag=True)
 def generate(x_regions, meta_regions, verbose):
     board = SudokuBoardGenerator(x_regions, meta_regions)
+    last_status_clock = time.clock()
     for msg in board.generate_iter():
-        print msg
+        if 'gen' in msg or time.clock() - last_status_clock > 1:
+            last_status_clock = time.clock()
+            for lmsg in board._log:
+                print lmsg
+            board._log = []
+            print msg
+
 
 
 @cli.command()
@@ -59,7 +68,7 @@ def generate(x_regions, meta_regions, verbose):
 @click.option('-B', '--disable-bruteforce', is_flag=True)
 def solve(load, x_regions, meta_regions, verbose, disable_bruteforce):
     board = SudokuBoardSolver(x_regions, meta_regions)
-    board.load_game(load)
+    board.load_game(str(load))
     console_solve(board, verbose=verbose,
                   allow_bruteforce=not disable_bruteforce)
 
