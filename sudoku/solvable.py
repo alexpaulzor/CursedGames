@@ -138,12 +138,19 @@ class Square(object):
         return possible_values
 
     def __repr__(self):
-        return "{}: {}{} !{} ?{}".format(
-            self.name,
-            '=' if self.is_given else '?',
-            self.get_value(),
-            self.prevented_value,
-            self.value_attempts)
+        out = self.name + ": "
+        if self.get_value():
+            if self.is_given:
+                out += '=='
+            else:
+                out += '?='
+            out += str(self.get_value())
+        else:
+            out += ' ??' + ''.join(sorted(map(str, self.possible_values)))
+        if self.prevented_value:
+            out += '; !=' + str(self.prevented_value)
+        out += '; ~=' + ''.join(sorted(map(str, self.value_attempts)))
+        return out
 
 
 class ExclusiveSet(object):
