@@ -1,6 +1,6 @@
-from random import shuffle
+from random import shuffle, randrange, choice
 import time
-from solvable import Square, ExclusiveSet, N, N_2, N_4
+from solvable import Square, ExclusiveSet, N, N_2, N_4, SectorSet
 
 MIN_CLUES = 19
 MAX_CLUES = 24
@@ -26,7 +26,8 @@ class SudokuBoard(object):
         self.redo_states = []
         self.build_rows()
         self.build_columns()
-        self.build_sectors()
+        #self.build_sectors()
+        self.build_squiggle_sectors()
         self.build_x_regions()
         self.build_meta_regions()
 
@@ -189,13 +190,110 @@ class SudokuBoard(object):
             self.sets.add(column)
 
     def build_sectors(self):
+
         for i in range(N):
             for j in range(N):
-                sector = ExclusiveSet("sector_{},{}".format(j, i))
+                sector = SectorSet("sector_{},{}".format(j, i))
                 for y in range(N * i, N * i + N):
                     for x in range(N * j, N * j + N):
                         sector.add_square(self.grid[y][x])
                 self.sets.add(sector)
+
+    def _claimed_neighbors(self, sq):
+        neighbors = set()
+        if sq.y > 0:
+            neighbors.add(self.grid[sq.y-1][sq.x])
+        if sq.x > 0:
+            neighbors.add(self.grid[sq.y][sq.x-1])
+        if sq.y < N_2 - 1:
+            neighbors.add(self.grid[sq.y+1][sq.x])
+        if sq.x < N_2 - 1:
+            neighbors.add(self.grid[sq.y][sq.x+1])
+        return [s for s in neighbors if s.sector_set and len(s.sector_set.squares) < N_2]
+
+    def _opposite_sq(self, sq):
+        return self.grid[N_2 - 1 - sq.y][N_2 - 1 - sq.x]
+
+    def _claim_square(self, unclaimed_squares):
+        for sq in unclaimed_squares:
+            sq2 = self._opposite_sq(sq)
+            if sq.sector_set or sq2.sector_set:
+                continue
+            claimed_neighb = self._claimed_neighbors(sq)
+            if not claimed_neighb:
+                continue
+            neb = choice(claimed_neighb)
+            neb2 = self._opposite_sq(neb)
+            neb.sector_set.add_square(sq)
+            neb2.sector_set.add_square(sq2)
+            return
+        print "Could not claim any of {}".format(unclaimed_squares)
+
+
+    def build_squiggle_sectors(self):
+        sector_sets = [[
+            SectorSet("sector_{},{}".format(j, i)) for j in range(N)]
+            for i in range(N)]
+
+        # seeds: corners, center, and one-in from border at centers
+        seeds = [
+            [(0, 0), (1, 4), (0, 8)],
+            [(4, 1), (4, 4), (4, 7)],
+            [(8, 0), (7, 4), (8, 8)],
+        ]
+
+        for i in range(N):
+            for j in range(N):
+                # the 'seed' square has to be one of the expected 3x3 that would
+                # normally be in it
+                seed_y, seed_x = seeds[i][j]
+                sq = self.grid[seed_y][seed_x]
+                ss = sector_sets[i][j]
+                ss.add_square(sq)
+                print ("Sect {} seed {}".format(ss, sq))
+
+        unclaimed_squares = []
+        for row in self.grid:
+            unclaimed_squares += [s for s in row if not s.sector_set]
+
+        while unclaimed_squares:
+            shuffle(unclaimed_squares)
+            self._claim_square(unclaimed_squares)
+            unclaimed_squares = [s for s in unclaimed_squares if not s.sector_set]
+
+
+
+
+
+
+
+
+        # # now, we have N_4 - N_2 squares left to go. Find an unclaimed neighbor
+        # # and add it to the set.
+        # for w in range(N_2 - 1):
+        #     for i in range(N / 2 + 1):
+        #         for j in range(N - i):
+        #             ss = sector_sets[i][j]
+        #             ss2 = sector_sets[N - 1 - i][N - 1 - j]
+        #             ss_un = self._unclaimed_neighbors(ss)
+        #             print("{} unc neighb {}".format(ss, ss_un))
+        #             if not ss_un:
+        #                 print (
+        #                     "Alg fail: {} has no unc neighbs".format(
+        #                         ss))
+        #                 continue
+        #             sq = choice(ss_un)
+        #             ss.add_square(sq)
+        #             sq2 = self.grid[N_2 - 1 - sq.y][N_2 - 1 - sq.x]
+        #             if ss != ss2 and sq != sq2:
+        #                 if sq2.sector_set:
+        #                     print (
+        #                         "Alg fail: {} already has a sector set: {}. cannot set to: {}".format(
+        #                             sq2, sq2.sector_set, ss2))
+        #                 ss2.add_square(sq2)
+
+        for row in sector_sets:
+            self.sets |= set(row)
 
     def build_x_regions(self):
         self.x_down = ExclusiveSet('x_down', enabled=self.x_regions)

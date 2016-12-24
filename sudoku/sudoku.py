@@ -31,7 +31,7 @@ def play(load, x_regions, meta_regions, verbose):
     #     print repr(e)
     finally:
         print "\n".join(s.board._log)
-        print "initial: " + s.board.original_state
+        print "initial: " + str(s.board.original_state)
         print "final: " + s.board.current_state()
         if s.board.is_solved():
             print "You won!"

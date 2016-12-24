@@ -6,6 +6,7 @@ import click
 import sys
 import time
 from sudokuboard import SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4
+from solvable import ROW_LETTERS
 import threading
 
 COLOR_SELECTED = 10
@@ -122,17 +123,45 @@ class SudokuDisplay:
         x = sq.x * (self.value_width + 1)
         v = sq.get_value()
         color = self._get_square_color(sq)
+        if not sq.sector_set:
+            self.log("ALG FAIL: {} has no sector_set".format(sq))
+            color = COLOR_CONFLICT
+            sector_neighbor_coords = []
+        else:
+            sector_neighbor_coords = [(s.y, s.x) for s in sq.sector_set.squares]
+
+        top_sep = (sq.y-1, sq.x) not in sector_neighbor_coords
+        left_sep = (sq.y, sq.x-1) not in sector_neighbor_coords
+
+        if top_sep or left_sep:
+            top_line = '#'
+        else:
+            top_line = '+'
+        if top_sep:
+            top_line += '=' * self.value_width
+        else:
+            top_line += '-' * self.value_width
+        if sq.x == 8:
+            top_line += '#'
+        self.stdscr.addstr(y, x, top_line)
+        for dy in range(1, self.value_height):
+            self.stdscr.addstr(y+dy, x, '#' if left_sep else '|')
+            if sq.x == 8:
+                self.stdscr.addstr(y+dy, x + self.value_width+1, '#')
+        if sq.y == 8:
+            self.stdscr.addstr(y+self.value_height, x, '#' + '=' * self.value_width + '#')
+
 
         if self.draw_small:
-            self.stdscr.addch(y, x, curses.ACS_PLUS)
-            self.stdscr.addch(y+1, x, curses.ACS_VLINE)
-            #self.stdscr.addch(y+2, x, curses.ACS_PLUS)
-            for dx in range(x, x + self.value_width):
-                self.stdscr.addch(y, dx, curses.ACS_HLINE)
-                #self.stdscr.addch(y+2, dx, curses.ACS_HLINE)
-            self.stdscr.addch(y, x+self.value_width, curses.ACS_PLUS)
-            self.stdscr.addch(y+1, x+self.value_width, curses.ACS_VLINE)
-            #self.stdscr.addch(y+2, x+self.value_width, curses.ACS_PLUS)
+            # self.stdscr.addch(y, x, curses.ACS_PLUS)
+            # self.stdscr.addch(y+1, x, curses.ACS_VLINE)
+            # #self.stdscr.addch(y+2, x, curses.ACS_PLUS)
+            # for dx in range(x, x + self.value_width):
+            #     self.stdscr.addch(y, dx, curses.ACS_HLINE)
+            #     #self.stdscr.addch(y+2, dx, curses.ACS_HLINE)
+            # self.stdscr.addch(y, x+self.value_width, curses.ACS_PLUS)
+            # self.stdscr.addch(y+1, x+self.value_width, curses.ACS_VLINE)
+            # #self.stdscr.addch(y+2, x+self.value_width, curses.ACS_PLUS)
             self.stdscr.addstr(y+1, x+1, " " * self.value_width, curses.color_pair(color))
             attributes = curses.A_UNDERLINE if sq.is_given else 0
             if v:
@@ -143,14 +172,14 @@ class SudokuDisplay:
                     curses.color_pair(v) | attributes)
 
     def draw_board(self):
-        # if self.draw_small:
-        #     for row in self.board.grid:
-        #         for sq in row:
-        #             self.draw_square(sq)
-        #     self._draw_value_counts()
-        #     self._draw_log()
-        #     self.stdscr.refresh()
-        #     return
+        if self.draw_small:
+            for row in self.board.grid:
+                for sq in row:
+                    self.draw_square(sq)
+            self._draw_value_counts()
+            self._draw_log()
+            self.stdscr.refresh()
+            return
 
         (value_width, horiz_sep,
          major_horiz_sep, blank_line) = self._get_blank_board_strings()
@@ -192,6 +221,8 @@ class SudokuDisplay:
                     linex += 2
                     if self.draw_small:
                             linex += 2
+                if self.draw_small or line == 1:
+                    self.stdscr.addstr(liney, linex + 1, ROW_LETTERS[y])
                 liney += 1
 
             if (y+1) % N == 0:
@@ -199,6 +230,10 @@ class SudokuDisplay:
             else:
                 self.stdscr.addstr(liney, 0, horiz_sep, curses.A_DIM)
             liney += 1
+        linex = 1 + self.value_width / 2
+        for x in range(N_2):
+            self.stdscr.addstr(liney, linex, str(x))
+            linex += self.value_width + 1
 
         self._draw_value_counts()
         self._draw_log()

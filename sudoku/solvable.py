@@ -1,4 +1,6 @@
 
+from random import shuffle
+
 N = 3
 N_2 = N * N
 N_3 = N_2 * N
@@ -16,6 +18,7 @@ class Square(object):
         self.is_given = False
         self._value = None
         self._sets = set()
+        self.sector_set = None
         self.solved = False
         self.visited = False
         self.changed = False
@@ -28,6 +31,12 @@ class Square(object):
 
     def add_set(self, s):
         self._sets.add(s)
+        if isinstance(s, SectorSet):
+            if self.sector_set:
+                #raise RuntimeError("WARNING: REASSIGNING {} SS {} -> {}".format(self, self.sector_set, s))
+                self._sets.remove(self.sector_set)
+                self.sector_set.squares.remove(self)
+            self.sector_set = s
 
     def clear(self):
         if not self.is_given:
@@ -266,4 +275,43 @@ class ExclusiveSet(object):
         square.add_set(self)
 
     def __repr__(self):
-        return "{}: {}".format(self.name, self.known_values())
+        return "{}: {}".format(self.name, self.squares)
+
+
+class SectorSet(ExclusiveSet):
+    """This is for sets that represent 9-square sectors, either
+    the typical 3x3 or a squiggly version.
+
+    This is accomplished by starting with the root square for each sector,
+    and then 'growing' towards an unclaimed neighbor. The board must be kept
+    symmetrical, as well.
+
+    For reference, here is an example grid:
+    #===+===+===#===+===+===#===+===+===#
+    #   |   | 9 |   |   |   #   |   |   #
+    #===#---+---+---+---+---#---+---+---#
+    #   #   | 7 |   |   |   #   | 4 | 3 #
+    #---+---+===#---+---+---#---+---+---#
+    # 5 # 8 # 1 |   |   |   #   |   |   #
+    #---+===+---#===+===+===#===+===+===#
+    #   |   |   #   |   | 8 #   | 5 | 1 #
+    #===+---+===#---+---+---#---+---+---#
+    #   #   # 8 #   |   |   # 2 |   |   #
+    #---+===+---#---+---+---#---+---+---#
+    # 3 | 6 |   # 7 |   |   #   |   |   #
+    #===+===+===#===+===+===#===+===+===#
+    #   #   |   #   |   |   # 8 | 7 | 5 #
+    #---+---+---#---+---+---#---+---+---#
+    # 9 # 1 |   #   |   |   # 6 |   |   #
+    #---+===+---#---+---+---#---+---+---#
+    #   |   #   |   |   |   # 9 |   |   #
+    #===+===+===#===+===+===#===+===+===#
+
+    """
+    # def find_unclaimed_neighbor(self):
+    #     my_squares = list(self.squares)
+    #     shuffle(my_squares)
+
+    #     for sq in my_squares:
+
+
