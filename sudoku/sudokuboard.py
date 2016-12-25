@@ -319,6 +319,7 @@ class SudokuBoardSolver(SudokuBoard):
             for msg in s.try_solve_iter(verbose=verbose):
                 if verbose:
                     yield msg
+                #print self.current_state()
         if verbose:
             yield "try_solve complete"
 

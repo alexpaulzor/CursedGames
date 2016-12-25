@@ -1,3 +1,4 @@
+from collections import defaultdict
 
 N = 3
 N_2 = N * N
@@ -116,6 +117,9 @@ class Square(object):
         else:
             self._value = None
 
+    def eliminate_values(self, impossible_values):
+        self.set_possible_values(self.possible_values - impossible_values)
+
     def conflict_squares(self):
         sqs = set()
         if self.is_unknown():
@@ -154,7 +158,7 @@ class Square(object):
             out += ' ??' + ''.join(sorted(map(str, self.possible_values)))
         if self.prevented_value:
             out += '; !=' + str(self.prevented_value)
-        out += '; ~=' + ''.join(sorted(map(str, self.value_attempts)))
+        # out += '; ~=' + ''.join(sorted(map(str, self.value_attempts)))
         return out
 
 
@@ -220,6 +224,8 @@ class ExclusiveSet(object):
                 for msg in self._eliminate_via_projection(v, sqs,
                                                           verbose=verbose):
                     yield msg
+        # for msg in self._group_values(verbose=verbose):
+        #     yield msg
 
     def _solve_naked_pairs(self, sq, solved_pairs, verbose=False):
         for sq2 in self.squares - solved_pairs:
@@ -248,7 +254,7 @@ class ExclusiveSet(object):
 
         if self not in overlapping_sets:
             raise RuntimeError("self {} should be in {}".format(self,
-                overlapping_sets))
+                               overlapping_sets))
         overlapping_sets.remove(self)
         if not any(overlapping_sets):
             return
@@ -265,6 +271,41 @@ class ExclusiveSet(object):
         if verbose and toggled_squares > 0:
             yield "project {} in {} to {} other sets ({} squares)".format(
                 value, self, len(overlapping_sets), toggled_squares)
+
+    # def _group_values(self, verbose=False):
+    #     squares_with_value = [s for s in self.squares if not s.get_value()]
+
+    #     # 'sorted pvs' => set(squares)
+    #     friends = defaultdict(set)
+    #     for i, sq in enumerate(squares_with_value):
+    #         for sq2 in squares_with_value[i+1:]:
+    #             common_pvs = sq.possible_values & sq2.possible_values
+    #             if len(common_pvs) > 1:
+    #                 key = ''.join(map(str, sorted(common_pvs)))
+    #                 friends[key].add(sq)
+    #                 friends[key].add(sq2)
+
+    #     for pvs in reversed(friends.keys()):
+    #         sqs = friends[pvs]
+    #         if len(sqs) == len(pvs):
+    #             msg = "friends: {}: {}".format(pvs, sqs)
+    #             print msg
+    #             yield msg
+    #             pv_set = set(map(int, list(pvs)))
+    #             changed = False
+    #             for sq in self.squares:
+    #                 if sq not in sqs and any(sq.possible_values & pv_set) and any(sq.possible_values - pv_set):
+    #                     msg = "group {} -= {}".format(sq, pv_set)
+    #                     print msg
+    #                     yield msg
+    #                     sq.eliminate_values(pv_set)
+    #                     changed = True
+    #                     return
+    #             if changed:
+    #                 msg = "group_values {} in {}".format(pvs, self)
+    #                 print msg
+    #                 yield msg
+    #                 return
 
     def add_square(self, square):
         self.squares.add(square)

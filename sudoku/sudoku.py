@@ -20,7 +20,10 @@ def cli():
 @click.option('-x', '--x-regions', is_flag=True)
 @click.option('-m', '--meta-regions', is_flag=True)
 @click.option('-v', '--verbose', is_flag=True)
-def play(puzzle, x_regions, meta_regions, verbose):
+@click.option('-g', '--generate', is_flag=True)
+def play(puzzle, x_regions, meta_regions, verbose, generate):
+    if generate:
+        puzzle = _generate(x_regions, meta_regions, verbose)
     s = SudokuDisplay(x_regions, meta_regions)
     if puzzle:
         s.board.load_game(str(puzzle))
@@ -48,6 +51,9 @@ def log(msg, replace=False):
 @click.option('-m', '--meta-regions', is_flag=True)
 @click.option('-v', '--verbose', is_flag=True)
 def generate(x_regions, meta_regions, verbose):
+    _generate(x_regions, meta_regions, verbose)
+
+def _generate(x_regions, meta_regions, verbose):
     board = SudokuBoardGenerator(x_regions, meta_regions)
     last_status_clock = time.clock()
     for msg in board.generate_iter():
@@ -57,7 +63,9 @@ def generate(x_regions, meta_regions, verbose):
                 print lmsg
             board._log = []
             print msg
-    print "Generated: " + board.current_state(givens_only=True)
+    result = board.current_state(givens_only=True)
+    print "Generated: " + result
+    return result
 
 
 
