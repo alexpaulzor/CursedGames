@@ -6,6 +6,9 @@ N_4 = N_3 * N
 
 ROW_LETTERS = 'ABCDEFGHI'
 
+class UnsolvableError(Exception):
+    pass
+
 class Square(object):
     def __init__(self, x, y):
         super(Square, self).__init__()
@@ -106,7 +109,9 @@ class Square(object):
         self.possible_values = possible_values
         if self.prevented_value in self.possible_values:
             self.possible_values.remove(self.prevented_value)
-        if len(self.possible_values) == 1:
+        if not any(self.possible_values):
+            raise UnsolvableError("No legal value for {}".format(self))
+        elif len(self.possible_values) == 1:
             self._value = tuple(self.possible_values)[0]
         else:
             self._value = None

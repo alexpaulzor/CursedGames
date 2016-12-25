@@ -1,6 +1,6 @@
 from random import shuffle
 import time
-from solvable import Square, ExclusiveSet, N, N_2, N_4
+from solvable import Square, ExclusiveSet, N, N_2, N_4, UnsolvableError
 
 MIN_CLUES = 19
 MAX_CLUES = 24
@@ -269,15 +269,43 @@ class SudokuBoardSolver(SudokuBoard):
         if self.is_solved():
             return
         inferred_state = self.current_state()
+
+        # TODO: find the square with the fewest possible_values (i.e. a pair)
+        # Try each value to locate contradictions or successes
+
         #self.freeze_known_or_clear()
         self.log("No more progress from solve_step: " + inferred_state)
-        self.log("freezing known values and bruteforcing..." +
-                 self.current_state())
-        start_square = self.selected_square
-        for msg in self.bruteforce_iter():
-            yield msg
-        if not any(start_square.value_attempts):
-            yield "Unsolvable!"
+
+        for i in range(2, N_2+1):
+            for row in self.grid:
+                for sq in row:
+                    if not sq.get_value() and len(sq.possible_values) <= i:
+                        pv = list(sq.possible_values)
+                        for v in pv[:]:
+                            self.load_game(inferred_state)
+                            sq.set_value(v, False)
+                            self.log("i={} Guess and checking with {}".format(i, sq))
+                            try:
+                                while not self.is_solved():
+                                    if not self.solve_step():
+                                        break
+                                if self.is_solved():
+                                    return
+                            except UnsolvableError as ue:
+                                yield str(ue)
+                                pv.remove(v)
+                        self.load_game(inferred_state)
+                        # if any(pv):
+                        sq.set_possible_values(set(pv))
+                        inferred_state = self.current_state()
+
+        # self.log("freezing known values and bruteforcing..." +
+        #          self.current_state())
+        # start_square = self.selected_square
+        # for msg in self.bruteforce_iter():
+        #     yield msg
+        # if not any(start_square.value_attempts):
+        #     yield "Unsolvable!"
 
     def solve_step(self):
         """return truthy if progress was made"""

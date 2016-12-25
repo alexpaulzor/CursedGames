@@ -441,13 +441,23 @@ class SudokuDisplay:
             return None
         self._computed_solution = solver.current_state(
             include_possibles=False)
+        self._log_check_solution()
         return self._computed_solution
+
+    def _log_check_solution(self):
+        if self.show_all_conflicts and self._computed_solution:
+            for row in self.board.grid:
+                for sq in row:
+                    correct_value = int(self._computed_solution[sq.id - N_4])
+                    if correct_value not in sq.possible_values:
+                        self.log("Checking solution...Errors exist")
+                        return
+            self.log('Checking solution...ok')
 
     def _toggle_conflicts(self):
         self._compute_solution()
         self.show_all_conflicts = not self.show_all_conflicts
-        if self.show_all_conflicts:
-            self.log("Checking solution...")
+        self._log_check_solution()
 
     def _init_colors(self):
         curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)

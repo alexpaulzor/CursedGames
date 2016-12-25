@@ -51,7 +51,7 @@ def generate(x_regions, meta_regions, verbose):
     board = SudokuBoardGenerator(x_regions, meta_regions)
     last_status_clock = time.clock()
     for msg in board.generate_iter():
-        if 'gen' in msg or time.clock() - last_status_clock > 1:
+        if verbose or 'gen' in msg or time.clock() - last_status_clock > 1:
             last_status_clock = time.clock()
             for lmsg in board._log:
                 print lmsg
