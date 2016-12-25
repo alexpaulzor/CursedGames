@@ -247,8 +247,10 @@ class SudokuBoardSolver(SudokuBoard):
             for sq in row:
                 if sq.get_value():
                     sq.set_value(sq.get_value(), given=True)
+
                 else:
                     sq.clear()
+                sq.reset_values_to_attempt()
 
     def solve_iter(self):
         """Solve, no matter what."""
@@ -262,7 +264,7 @@ class SudokuBoardSolver(SudokuBoard):
         else:
             yield "Could not solve!"
 
-    def smart_solve_iter(self):
+    def smart_solve_iter(self, level=0):
         while not self.is_solved():
             if not self.solve_step():
                 break
@@ -270,42 +272,41 @@ class SudokuBoardSolver(SudokuBoard):
             return
         inferred_state = self.current_state()
 
-        # TODO: find the square with the fewest possible_values (i.e. a pair)
-        # Try each value to locate contradictions or successes
+        yield ("lev {}: No more progress from solve_step: " +
+               inferred_state).format(level)
 
-        #self.freeze_known_or_clear()
-        self.log("No more progress from solve_step: " + inferred_state)
+        if level > 3:
+            self.log("lev {}: freezing known vals and bruteforcing".format(level))
+            for msg in self.bruteforce_iter():
+                yield msg
+            if not self.is_solved():
+                raise UnsolvableError("Bruteforce failed")
+            return
 
-        for i in range(2, N_2+1):
-            for row in self.grid:
-                for sq in row:
-                    if not sq.get_value() and len(sq.possible_values) <= i:
-                        pv = list(sq.possible_values)
-                        for v in pv[:]:
-                            self.load_game(inferred_state)
-                            sq.set_value(v, False)
-                            self.log("i={} Guess and checking with {}".format(i, sq))
-                            try:
-                                while not self.is_solved():
-                                    if not self.solve_step():
-                                        break
-                                if self.is_solved():
-                                    return
-                            except UnsolvableError as ue:
-                                yield str(ue)
-                                pv.remove(v)
-                        self.load_game(inferred_state)
-                        # if any(pv):
-                        sq.set_possible_values(set(pv))
-                        inferred_state = self.current_state()
+        min_possibles = N_2
+        for sq in self.unsolved_squares():
+            if len(sq.possible_values) > min_possibles:
+                continue
+            min_possibles = len(sq.possible_values)
+            pv = list(sq.possible_values)
+            pv_orig = pv[:]
+            for v in pv_orig:
+                self.load_game(inferred_state)
+                sq.set_value(v, True)
+                yield "lev {}: Guess and checking with {}".format(level, sq)
+                try:
+                    for msg in self.smart_solve_iter(level + 1):
+                        yield msg
+                except UnsolvableError as ue:
+                    yield str(ue)
+                    pv.remove(v)
+                    if not any(pv):
+                        raise ue
+            self.load_game(inferred_state)
 
-        # self.log("freezing known values and bruteforcing..." +
-        #          self.current_state())
-        # start_square = self.selected_square
-        # for msg in self.bruteforce_iter():
-        #     yield msg
-        # if not any(start_square.value_attempts):
-        #     yield "Unsolvable!"
+            if pv != pv_orig:
+                sq.set_possible_values(set(pv))
+                inferred_state = self.current_state()
 
     def solve_step(self):
         """return truthy if progress was made"""
@@ -333,6 +334,7 @@ class SudokuBoardSolver(SudokuBoard):
             yield "try_solve complete"
 
     def bruteforce_iter(self):
+        self.freeze_known_or_clear()
         start_square = self.selected_square
         while start_square.is_given:
             self.select_prev_square()
@@ -399,7 +401,7 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             for sq in row:
                 sq.prepare_for_generate()
         self.log("gen: Computing solution...")
-        for msg in self.solve_iter():
+        for msg in self.bruteforce_iter():
             yield msg
         solution = self.current_state(include_possibles=False)
         if not self.is_solved():
@@ -442,8 +444,11 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             givens[N_4 + sq.id] = '.'
             self.log("gen: loading " + given_str(givens[81:]))
             self.load_game(given_str(givens[81:]))
-            for msg in self.solve_iter():
-                yield msg
+            try:
+                for msg in self.solve_iter():
+                    yield msg
+            except UnsolvableError as ue:
+                yield ue
             sq.prevent_value(None)
             if self.is_solved() and self.current_state(include_possibles=False) != solution:
                 # can't remove this square, since it's unsolvable

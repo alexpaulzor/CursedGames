@@ -68,24 +68,25 @@ def generate(x_regions, meta_regions, verbose):
 @click.option('-B', '--disable-bruteforce', is_flag=True)
 def solve(load, x_regions, meta_regions, verbose, disable_bruteforce):
     board = SudokuBoardSolver(x_regions, meta_regions)
-    board.load_game(str(load))
+    if load:
+        board.load_game(str(load))
     console_solve(board, verbose=verbose,
                   allow_bruteforce=not disable_bruteforce)
 
 
 def console_solve(board, verbose=True, allow_bruteforce=False):
-    prev_state = None
-    while board.current_state() != prev_state:
-        prev_state = board.current_state()
-        for msg in board.solve_step_iter(prev_state, verbose=True):
+    # prev_state = None
+    # while board.current_state() != prev_state:
+    #     prev_state = board.current_state()
+    #     for msg in board.solve_step_iter(prev_state, verbose=True):
+    #         print msg
+    # if not board.is_solved() and allow_bruteforce:
+    #     print "Bruteforcing..."
+    last_status_clock = time.clock()
+    for msg in board.solve_iter():
+        if verbose or time.clock() - last_status_clock > 1:
+            last_status_clock = time.clock()
             print msg
-    if not board.is_solved() and allow_bruteforce:
-        print "Bruteforcing..."
-        last_status_clock = time.clock()
-        for msg in board.solve_iter():
-            if time.clock() - last_status_clock > 1:
-                last_status_clock = time.clock()
-                print msg
 
 
 if __name__ == "__main__":
