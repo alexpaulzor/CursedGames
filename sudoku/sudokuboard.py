@@ -1,6 +1,6 @@
 from random import shuffle
 import time
-from solvable import Square, ExclusiveSet, N, N_2, N_4, UnsolvableError
+from solvable import Square, ExclusiveSet, N, N_2, N_4, UnsolvableError, ROW_LETTERS
 
 MIN_CLUES = 19
 MAX_CLUES = 24

@@ -5,7 +5,8 @@ import click
 
 import sys
 import time
-from sudokuboard import SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4
+from sudokuboard import (SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4,
+    ROW_LETTERS)
 import threading
 
 COLOR_SELECTED = 10
@@ -191,7 +192,9 @@ class SudokuDisplay:
                             linex += 2
                     linex += 2
                     if self.draw_small:
-                            linex += 2
+                        linex += 2
+                if self.draw_small or line == 1:
+                    self.stdscr.addstr(liney, linex + 1, ROW_LETTERS[y])
                 liney += 1
 
             if (y+1) % N == 0:
@@ -199,6 +202,11 @@ class SudokuDisplay:
             else:
                 self.stdscr.addstr(liney, 0, horiz_sep, curses.A_DIM)
             liney += 1
+
+        linex = 1 + value_width / 2
+        for x in range(N_2):
+            self.stdscr.addstr(liney, linex, str(x))
+            linex += value_width + 1
 
         self._draw_value_counts()
         self._draw_log()
