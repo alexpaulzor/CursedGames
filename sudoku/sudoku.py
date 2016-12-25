@@ -16,14 +16,14 @@ def cli():
 
 
 @cli.command()
-@click.option('-l', '--load', type=str)
+@click.argument('puzzle', type=str, required=False)
 @click.option('-x', '--x-regions', is_flag=True)
 @click.option('-m', '--meta-regions', is_flag=True)
 @click.option('-v', '--verbose', is_flag=True)
-def play(load, x_regions, meta_regions, verbose):
+def play(puzzle, x_regions, meta_regions, verbose):
     s = SudokuDisplay(x_regions, meta_regions)
-    if load:
-        s.board.load_game(str(load))
+    if puzzle:
+        s.board.load_game(str(puzzle))
 
     try:
         curses.wrapper(s.newgame)
@@ -31,7 +31,7 @@ def play(load, x_regions, meta_regions, verbose):
     #     print repr(e)
     finally:
         print "\n".join(s.board._log)
-        print "initial: " + s.board.original_state
+        print "initial: " + str(s.board.original_state)
         print "final: " + s.board.current_state()
         if s.board.is_solved():
             print "You won!"
@@ -57,24 +57,23 @@ def generate(x_regions, meta_regions, verbose):
                 print lmsg
             board._log = []
             print msg
+    print "Generated: " + board.current_state(givens_only=True)
 
 
 
 @cli.command()
-@click.option('-l', '--load', type=str)
+@click.argument('puzzle', type=str, required=False)
 @click.option('-x', '--x-regions', is_flag=True)
 @click.option('-m', '--meta-regions', is_flag=True)
 @click.option('-v', '--verbose', is_flag=True)
-@click.option('-B', '--disable-bruteforce', is_flag=True)
-def solve(load, x_regions, meta_regions, verbose, disable_bruteforce):
+def solve(puzzle, x_regions, meta_regions, verbose):
     board = SudokuBoardSolver(x_regions, meta_regions)
-    if load:
-        board.load_game(str(load))
-    console_solve(board, verbose=verbose,
-                  allow_bruteforce=not disable_bruteforce)
+    if puzzle:
+        board.load_game(str(puzzle))
+    console_solve(board, verbose=verbose)
 
 
-def console_solve(board, verbose=True, allow_bruteforce=False):
+def console_solve(board, verbose=True):
     # prev_state = None
     # while board.current_state() != prev_state:
     #     prev_state = board.current_state()
@@ -87,6 +86,8 @@ def console_solve(board, verbose=True, allow_bruteforce=False):
         if verbose or time.clock() - last_status_clock > 1:
             last_status_clock = time.clock()
             print msg
+    if not verbose:
+        print msg
 
 
 if __name__ == "__main__":

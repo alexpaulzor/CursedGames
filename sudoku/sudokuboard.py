@@ -247,10 +247,8 @@ class SudokuBoardSolver(SudokuBoard):
             for sq in row:
                 if sq.get_value():
                     sq.set_value(sq.get_value(), given=True)
-
                 else:
                     sq.clear()
-                sq.reset_values_to_attempt()
 
     def solve_iter(self):
         """Solve, no matter what."""
@@ -275,28 +273,19 @@ class SudokuBoardSolver(SudokuBoard):
         yield ("lev {}: No more progress from solve_step: " +
                inferred_state).format(level)
 
-        if level > 3:
-            self.log("lev {}: freezing known vals and bruteforcing".format(level))
-            for msg in self.bruteforce_iter():
-                yield msg
-            if not self.is_solved():
-                raise UnsolvableError("Bruteforce failed")
-            return
-
-        min_possibles = N_2
         for sq in self.unsolved_squares():
-            if len(sq.possible_values) > min_possibles:
-                continue
-            min_possibles = len(sq.possible_values)
             pv = list(sq.possible_values)
             pv_orig = pv[:]
             for v in pv_orig:
                 self.load_game(inferred_state)
-                sq.set_value(v, True)
-                yield "lev {}: Guess and checking with {}".format(level, sq)
+                sq.set_value(v, False)
+                yield ("lev {}: Guess and checking with {}".format(
+                    level, sq))
                 try:
                     for msg in self.smart_solve_iter(level + 1):
                         yield msg
+                    if self.is_solved():
+                        return
                 except UnsolvableError as ue:
                     yield str(ue)
                     pv.remove(v)
@@ -334,7 +323,6 @@ class SudokuBoardSolver(SudokuBoard):
             yield "try_solve complete"
 
     def bruteforce_iter(self):
-        self.freeze_known_or_clear()
         start_square = self.selected_square
         while start_square.is_given:
             self.select_prev_square()
@@ -448,7 +436,7 @@ class SudokuBoardGenerator(SudokuBoardSolver):
                 for msg in self.solve_iter():
                     yield msg
             except UnsolvableError as ue:
-                yield ue
+                yield str(ue)
             sq.prevent_value(None)
             if self.is_solved() and self.current_state(include_possibles=False) != solution:
                 # can't remove this square, since it's unsolvable
