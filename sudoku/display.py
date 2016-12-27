@@ -6,7 +6,7 @@ import click
 import sys
 import time
 from sudokuboard import (SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4,
-    ROW_LETTERS)
+    ROW_LETTERS, UnsolvableError)
 import threading
 
 COLOR_SELECTED = 10
@@ -373,9 +373,27 @@ class SudokuDisplay:
             self.board.set_x_regions(not self.board.x_regions)
         elif key == 'm':
             self.board.set_meta_regions(not self.board.meta_regions)
+        elif key == 'd': # debug
+            self._debug()
         if self.board.current_state() != initial_state:
             self.save_state(log=False)
             self.steps += 1
+
+    def _debug(self):
+        self.stdscr.nodelay(False)
+        wait = True
+        for s in self.board.sets:
+            for msg in s._group_values(verbose=True):
+                self.log(msg)
+                self.draw_board()
+                if wait:
+                    key = self.stdscr.getkey()
+                    if key != 'd':
+                        wait = False
+                        return
+                elif wait is None:
+                    wait = True
+        self.stdscr.nodelay(True)
 
     def _generate(self):
         self.stdscr.nodelay(True)
@@ -407,6 +425,7 @@ class SudokuDisplay:
         step_msgs = self.board.solve_step_iter(last_state, verbose=True)
         for msg in step_msgs:
             state = self.board.current_state()
+            msg = str(msg)
             if state == last_state:
                 msg += '...ineffective'
                 self.log(msg, replace=last_msg_ineffective)
@@ -439,16 +458,27 @@ class SudokuDisplay:
         solver.load_game(self.board.current_state(givens_only=True))
         self.log("Computing solution...")
         last_status_clock = time.clock()
-        for msg in solver.solve_iter():
-            if time.clock() - last_status_clock > 1:
-                last_status_clock = time.clock()
-                self.log(msg, replace=True)
-                self.draw_board()
+        # try:
+        #     for msg in solver.solve_iter():
+        #         if time.clock() - last_status_clock > 1:
+        #             last_status_clock = time.clock()
+        #             self.log(msg, replace=True)
+        #             self.draw_board()
+        # except UnsolvableError:
+        #     pass
+        if not solver.is_solved():
+            self.log("Bruteforcing...")
+            for msg in solver.bruteforce_iter():
+                if time.clock() - last_status_clock > 1:
+                    last_status_clock = time.clock()
+                    self.log(msg, replace=True)
+                    self.draw_board()
         if not solver.is_solved():
             self.log("Unsolvable puzzle!")
             return None
-        self._computed_solution = solver.current_state(
-            include_possibles=False)
+        if not self._computed_solution:
+            self._computed_solution = solver.current_state(
+                include_possibles=False)
         self._log_check_solution()
         return self._computed_solution
 

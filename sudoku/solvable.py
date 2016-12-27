@@ -1,4 +1,5 @@
 from collections import defaultdict
+import itertools
 
 N = 3
 N_2 = N * N
@@ -13,7 +14,7 @@ class UnsolvableError(Exception):
 class Square(object):
     def __init__(self, x, y):
         super(Square, self).__init__()
-        self.name = "{}{}".format(ROW_LETTERS[x], y)
+        self.name = "{}{}".format(ROW_LETTERS[y], x)
         self.x = x
         self.y = y
         self.id = y * N_2 + x
@@ -107,12 +108,13 @@ class Square(object):
         self.set_possible_values(self.possible_values)
 
     def set_possible_values(self, possible_values):
-        self.possible_values = possible_values
-        if self.prevented_value in self.possible_values:
-            self.possible_values.remove(self.prevented_value)
-        if not any(self.possible_values):
+
+        if self.prevented_value in possible_values:
+            possible_values.remove(self.prevented_value)
+        if not any(possible_values):
             raise UnsolvableError("No legal value for {}".format(self))
-        elif len(self.possible_values) == 1:
+        self.possible_values = possible_values
+        if len(self.possible_values) == 1:
             self._value = tuple(self.possible_values)[0]
         else:
             self._value = None
@@ -135,8 +137,13 @@ class Square(object):
     def infer_values(self):
         if self.get_value():
             return
-        self.set_possible_values(self.possible_values &
-                                 self._inferred_possible_values())
+        pv = self.possible_values & self._inferred_possible_values()
+        if pv:
+            self.set_possible_values(pv)
+        #else:
+        #raise UnsolvableError("No possible values for {}".format(self))
+
+
 
     def _inferred_possible_values(self):
         possible_values = set(range(1, 10))
@@ -210,6 +217,10 @@ class ExclusiveSet(object):
                                                    verbose=verbose):
                     if verbose:
                         yield msg
+        yield possibles
+
+        # reversed version of possibles
+        possibles_grouped = defaultdict(set)
 
         for v, sqs in possibles.iteritems():
             if v in known_values:
@@ -221,9 +232,18 @@ class ExclusiveSet(object):
                 if verbose:
                     yield "solved unique value: {}".format(sq)
             elif any(sqs):
+                possibles_grouped[tuple(sqs)].add(v)
+
                 for msg in self._eliminate_via_projection(v, sqs,
                                                           verbose=verbose):
                     yield msg
+        yield dict(possibles_grouped)
+        for sqs, pvs in possibles_grouped.iteritems():
+            if len(sqs) == len(pvs):
+                for sq in sqs:
+                    sq.set_possible_values(sq.possible_values & pvs)
+                yield "Reduced all but {} from {} within {}".format(pvs, sqs, self)
+
         # for msg in self._group_values(verbose=verbose):
         #     yield msg
 
@@ -272,40 +292,51 @@ class ExclusiveSet(object):
             yield "project {} in {} to {} other sets ({} squares)".format(
                 value, self, len(overlapping_sets), toggled_squares)
 
-    # def _group_values(self, verbose=False):
-    #     squares_with_value = [s for s in self.squares if not s.get_value()]
+    def _group_values(self, verbose=False):
+        # return []
+        # pass
+        squares_with_value = [s for s in self.squares if not s.get_value()]
 
-    #     # 'sorted pvs' => set(squares)
-    #     friends = defaultdict(set)
-    #     for i, sq in enumerate(squares_with_value):
-    #         for sq2 in squares_with_value[i+1:]:
-    #             common_pvs = sq.possible_values & sq2.possible_values
-    #             if len(common_pvs) > 1:
-    #                 key = ''.join(map(str, sorted(common_pvs)))
-    #                 friends[key].add(sq)
-    #                 friends[key].add(sq2)
+        # 'sorted pvs' => set(squares)
+        friends = defaultdict(set)
+        for i, sq in enumerate(squares_with_value):
+            for sq2 in squares_with_value[i+1:]:
+                common_pvs = sq.possible_values & sq2.possible_values
+                # npv = len(common_pvs)
+                # all_keys = sorted(itertools.chain(
+                #     *[itertools.combinations(common_pvs, i)
+                #         for i in range(npv, 1, -1)]))
+                # for comb in all_keys:
+                key = ''.join(map(str, sorted(common_pvs)))
+                friends[key].add(sq)
+                friends[key].add(sq2)
+        yield dict(friends)
 
-    #     for pvs in reversed(friends.keys()):
-    #         sqs = friends[pvs]
-    #         if len(sqs) == len(pvs):
-    #             msg = "friends: {}: {}".format(pvs, sqs)
-    #             print msg
-    #             yield msg
-    #             pv_set = set(map(int, list(pvs)))
-    #             changed = False
-    #             for sq in self.squares:
-    #                 if sq not in sqs and any(sq.possible_values & pv_set) and any(sq.possible_values - pv_set):
-    #                     msg = "group {} -= {}".format(sq, pv_set)
-    #                     print msg
-    #                     yield msg
-    #                     sq.eliminate_values(pv_set)
-    #                     changed = True
-    #                     return
-    #             if changed:
-    #                 msg = "group_values {} in {}".format(pvs, self)
-    #                 print msg
-    #                 yield msg
-    #                 return
+        for pvs in sorted(friends.keys(), cmp=lambda x, y: cmp(len(x), len(y)), reverse=True):
+            sqs = friends[pvs]
+            if len(sqs) == len(pvs):
+                msg = "friends: {}: {}".format(pvs, sqs)
+                if verbose:
+                    yield msg
+                #print msg
+                pv_set = set(map(int, list(pvs)))
+                changed = False
+                for sq in self.squares:
+                    if sq not in sqs and any(sq.possible_values & pv_set) and any(sq.possible_values - pv_set):
+                        msg = "group_values {} -= {} ({})".format(sq, pv_set, self)
+                        if verbose:
+                            yield msg
+                        #print msg
+                        sq.eliminate_values(pv_set)
+                        changed = True
+                        #return
+                if changed:
+                    msg = "group_values {} in {}".format(pvs, self)
+                    if verbose:
+                        yield msg
+                    #print msg
+                    #return
+        yield
 
     def add_square(self, square):
         self.squares.add(square)

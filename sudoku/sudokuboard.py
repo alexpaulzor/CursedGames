@@ -250,21 +250,9 @@ class SudokuBoardSolver(SudokuBoard):
                 else:
                     sq.clear()
 
-    def solve_iter(self):
-        """Solve, no matter what."""
-
-        for msg in self.smart_solve_iter():
-            yield msg
-        if self.is_solved():
-            state = self.current_state(include_possibles=False)
-            yield "Solved! " + state
-            return
-        else:
-            yield "Could not solve!"
-
-    def smart_solve_iter(self, level=0):
+    def _solve_iter(self, level=0, verbose=False):
         while not self.is_solved():
-            if not self.solve_step():
+            if not self.solve_step(verbose=verbose):
                 break
         if self.is_solved():
             return
@@ -273,44 +261,55 @@ class SudokuBoardSolver(SudokuBoard):
         yield ("lev {}: No more progress from solve_step: " +
                inferred_state).format(level)
 
-        for sq in self.unsolved_squares():
+        for sq in set(self.unsolved_squares()):
+            if sq.get_value():
+                continue
             pv = list(sq.possible_values)
             pv_orig = pv[:]
-            for v in pv_orig:
+            for i, v in enumerate(pv_orig):
                 self.load_game(inferred_state)
                 sq.set_value(v, False)
-                yield ("lev {}: Guess and checking with {}".format(
-                    level, sq))
+                yield ("lev {}: Guess and checking with {} ({}/{})".format(
+                    level, sq, i+1, len(pv_orig)))
                 try:
-                    for msg in self.smart_solve_iter(level + 1):
+                    for msg in self._solve_iter(level + 1, verbose=verbose):
                         yield msg
                     if self.is_solved():
                         return
                 except UnsolvableError as ue:
                     yield str(ue)
                     pv.remove(v)
-                    if not any(pv):
-                        raise ue
+                    # if not any(pv):
+                    #     raise ue
             self.load_game(inferred_state)
 
-            if pv != pv_orig:
+            if pv and pv != pv_orig:
                 sq.set_possible_values(set(pv))
                 inferred_state = self.current_state()
 
-    def solve_step(self):
+    def solve_iter(self, verbose=False):
+        for msg in self._solve_iter(verbose=verbose):
+            yield msg
+        if self.is_solved():
+            state = self.current_state(include_possibles=False)
+            yield "Solved! " + state
+            return
+        else:
+            yield "Could not solve!"
+
+    def solve_step(self, verbose=False):
         """return truthy if progress was made"""
         prev_state = self.current_state()
         # self.log("infer_values...")
-
-        for msg in self.solve_step_iter(prev_state):
-            pass
+        for msg in self.solve_step_iter(prev_state, verbose=verbose):
+            if verbose:
+                self.log(msg)
 
         return self.current_state() != prev_state
 
     def solve_step_iter(self, prev_state, verbose=False):
-        for row in self.grid:
-            for sq in row:
-                sq.infer_values()
+        for sq in self.unsolved_squares():
+            sq.infer_values()
         if verbose:
             yield "Infer values complete"
         if self.current_state() != prev_state:
@@ -384,7 +383,7 @@ class SudokuBoardSolver(SudokuBoard):
 
 
 class SudokuBoardGenerator(SudokuBoardSolver):
-    def generate_iter(self):
+    def generate_iter(self, verbose=False):
         # generate a game
         for row in self.grid:
             for sq in row:

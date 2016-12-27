@@ -5,7 +5,7 @@ import click
 
 import sys
 import time
-from sudokuboard import SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4
+from sudokuboard import SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4, UnsolvableError
 from display import SudokuDisplay
 import threading
 
@@ -56,7 +56,7 @@ def generate(x_regions, meta_regions, verbose):
 def _generate(x_regions, meta_regions, verbose):
     board = SudokuBoardGenerator(x_regions, meta_regions)
     last_status_clock = time.clock()
-    for msg in board.generate_iter():
+    for msg in board.generate_iter(verbose=verbose):
         if verbose or 'gen' in msg or time.clock() - last_status_clock > 1:
             last_status_clock = time.clock()
             for lmsg in board._log:
@@ -80,6 +80,29 @@ def solve(puzzle, x_regions, meta_regions, verbose):
         board.load_game(str(puzzle))
     console_solve(board, verbose=verbose)
 
+@cli.command()
+@click.argument('puzzle', type=str, required=False)
+@click.option('-x', '--x-regions', is_flag=True)
+@click.option('-m', '--meta-regions', is_flag=True)
+@click.option('-v', '--verbose', is_flag=True)
+def bruteforce(puzzle, x_regions, meta_regions, verbose):
+    board = SudokuBoardSolver(x_regions, meta_regions)
+    if puzzle:
+        board.load_game(str(puzzle))
+    # try:
+    #     console_solve(board, verbose=verbose)
+    # except UnsolvableError:
+    #     print "Unsolvable by intuition. Bruteforcing..."
+    last_status_clock = time.clock()
+    for msg in board.bruteforce_iter():
+        if verbose or time.clock() - last_status_clock > 1:
+            last_status_clock = time.clock()
+            print msg
+    if board.is_solved():
+        print "Solved! " + board.current_state(include_possibles=False)
+    else:
+        print "Could not solve " + board.current_state()
+
 
 def console_solve(board, verbose=True):
     # prev_state = None
@@ -90,13 +113,14 @@ def console_solve(board, verbose=True):
     # if not board.is_solved() and allow_bruteforce:
     #     print "Bruteforcing..."
     last_status_clock = time.clock()
-    for msg in board.solve_iter():
+    for msg in board.solve_iter(verbose=verbose):
         if verbose or time.clock() - last_status_clock > 1:
             last_status_clock = time.clock()
             print msg
-    if not verbose:
-        print msg
-
+    if board.is_solved():
+        print "Solved! " + board.current_state(include_possibles=False)
+    else:
+        print "Could not solve " + board.current_state()
 
 if __name__ == "__main__":
     cli()
