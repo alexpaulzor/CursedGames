@@ -8,8 +8,10 @@ N_4 = N_3 * N
 
 ROW_LETTERS = 'ABCDEFGHI'
 
+
 class UnsolvableError(Exception):
     pass
+
 
 class Square(object):
     def __init__(self, x, y):
@@ -138,12 +140,7 @@ class Square(object):
         if self.get_value():
             return
         pv = self.possible_values & self._inferred_possible_values()
-        if pv:
-            self.set_possible_values(pv)
-        #else:
-        #raise UnsolvableError("No possible values for {}".format(self))
-
-
+        self.set_possible_values(pv)
 
     def _inferred_possible_values(self):
         possible_values = set(range(1, 10))
@@ -212,12 +209,11 @@ class ExclusiveSet(object):
             for v in sq.possible_values:
                 possibles[v].add(sq)
             # naked pairs
-            if len(sq.possible_values) == 2 and sq not in solved_pairs:
-                for msg in self._solve_naked_pairs(sq, solved_pairs,
-                                                   verbose=verbose):
-                    if verbose:
-                        yield msg
-        yield possibles
+            # if len(sq.possible_values) == 2 and sq not in solved_pairs:
+            #     for msg in self._solve_naked_pairs(sq, solved_pairs,
+            #                                        verbose=verbose):
+            #         if verbose:
+            #             yield msg
 
         # reversed version of possibles
         possibles_grouped = defaultdict(set)
@@ -237,7 +233,7 @@ class ExclusiveSet(object):
                 for msg in self._eliminate_via_projection(v, sqs,
                                                           verbose=verbose):
                     yield msg
-        yield dict(possibles_grouped)
+        
         for sqs, pvs in possibles_grouped.iteritems():
             if len(sqs) == len(pvs):
                 for sq in sqs:
@@ -247,19 +243,19 @@ class ExclusiveSet(object):
         # for msg in self._group_values(verbose=verbose):
         #     yield msg
 
-    def _solve_naked_pairs(self, sq, solved_pairs, verbose=False):
-        for sq2 in self.squares - solved_pairs:
-            if sq == sq2 or sq.possible_values != sq2.possible_values:
-                continue
-            for sq_set in (sq.enabled_sets & sq2.enabled_sets):
-                for sq3 in sq_set.squares:
-                    if sq3 != sq and sq3 != sq2:
-                        sq3.set_possible_values(
-                            sq3.possible_values - sq.possible_values)
-            solved_pairs.add(sq)
-            solved_pairs.add(sq2)
-            if verbose:
-                yield "solve naked pair {} + {}".format(sq.name, sq2.name)
+    # def _solve_naked_pairs(self, sq, solved_pairs, verbose=False):
+    #     for sq2 in self.squares - solved_pairs:
+    #         if sq == sq2 or sq.possible_values != sq2.possible_values:
+    #             continue
+    #         for sq_set in (sq.enabled_sets & sq2.enabled_sets):
+    #             for sq3 in sq_set.squares:
+    #                 if sq3 != sq and sq3 != sq2:
+    #                     sq3.set_possible_values(
+    #                         sq3.possible_values - sq.possible_values)
+    #         solved_pairs.add(sq)
+    #         solved_pairs.add(sq2)
+    #         if verbose:
+    #             yield "solve naked pair {} + {}".format(sq.name, sq2.name)
 
     def _eliminate_via_projection(self, value, squares_with_value, verbose=False):
         """projection: if all of the squares including possible_value i within
@@ -291,52 +287,6 @@ class ExclusiveSet(object):
         if verbose and toggled_squares > 0:
             yield "project {} in {} to {} other sets ({} squares)".format(
                 value, self, len(overlapping_sets), toggled_squares)
-
-    def _group_values(self, verbose=False):
-        # return []
-        # pass
-        squares_with_value = [s for s in self.squares if not s.get_value()]
-
-        # 'sorted pvs' => set(squares)
-        friends = defaultdict(set)
-        for i, sq in enumerate(squares_with_value):
-            for sq2 in squares_with_value[i+1:]:
-                common_pvs = sq.possible_values & sq2.possible_values
-                # npv = len(common_pvs)
-                # all_keys = sorted(itertools.chain(
-                #     *[itertools.combinations(common_pvs, i)
-                #         for i in range(npv, 1, -1)]))
-                # for comb in all_keys:
-                key = ''.join(map(str, sorted(common_pvs)))
-                friends[key].add(sq)
-                friends[key].add(sq2)
-        yield dict(friends)
-
-        for pvs in sorted(friends.keys(), cmp=lambda x, y: cmp(len(x), len(y)), reverse=True):
-            sqs = friends[pvs]
-            if len(sqs) == len(pvs):
-                msg = "friends: {}: {}".format(pvs, sqs)
-                if verbose:
-                    yield msg
-                #print msg
-                pv_set = set(map(int, list(pvs)))
-                changed = False
-                for sq in self.squares:
-                    if sq not in sqs and any(sq.possible_values & pv_set) and any(sq.possible_values - pv_set):
-                        msg = "group_values {} -= {} ({})".format(sq, pv_set, self)
-                        if verbose:
-                            yield msg
-                        #print msg
-                        sq.eliminate_values(pv_set)
-                        changed = True
-                        #return
-                if changed:
-                    msg = "group_values {} in {}".format(pvs, self)
-                    if verbose:
-                        yield msg
-                    #print msg
-                    #return
-        yield
 
     def add_square(self, square):
         self.squares.add(square)
