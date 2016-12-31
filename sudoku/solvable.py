@@ -209,15 +209,15 @@ class ExclusiveSet(object):
             for v in sq.possible_values:
                 possibles[v].add(sq)
             # naked pairs
-            # if len(sq.possible_values) == 2 and sq not in solved_pairs:
-            #     for msg in self._solve_naked_pairs(sq, solved_pairs,
-            #                                        verbose=verbose):
-            #         if verbose:
-            #             yield msg
+            if len(sq.possible_values) == 2 and sq not in solved_pairs:
+                for msg in self._solve_naked_pairs(sq, solved_pairs,
+                                                   verbose=verbose):
+                    if verbose:
+                        yield msg
 
         # reversed version of possibles
         possibles_grouped = defaultdict(set)
-
+        yield possibles
         for v, sqs in possibles.iteritems():
             if v in known_values:
                 continue
@@ -233,29 +233,50 @@ class ExclusiveSet(object):
                 for msg in self._eliminate_via_projection(v, sqs,
                                                           verbose=verbose):
                     yield msg
-        
+        for msg in self._solve_groups(possibles_grouped):
+            yield msg
+
+
+    def _solve_groups(self, possibles_grouped):
+        yield dict(possibles_grouped)
         for sqs, pvs in possibles_grouped.iteritems():
             if len(sqs) == len(pvs):
                 for sq in sqs:
                     sq.set_possible_values(sq.possible_values & pvs)
                 yield "Reduced all but {} from {} within {}".format(pvs, sqs, self)
+            for sqs2, pvs2 in possibles_grouped.iteritems():
+                if sqs == sqs2:
+                    continue
+                com_sqs = set(sqs) & set(sqs2)
+                com_pvs = pvs | pvs2
+                if len(com_sqs) == len(com_pvs) == 2:
+
+                    yield "sqs; pvs | sqs2; pvs2 | com_sqs | com_pvs"
+                    yield (sqs, pvs, sqs2, pvs2, com_sqs, com_pvs)
+                    # for sq in com_sqs:
+                    #     sq.set_possible_values(com_pvs.copy())
+                    # for sq in self.squares - com_sqs:
+                    #     sq.eliminate_values(com_pvs)
+
+
+
 
         # for msg in self._group_values(verbose=verbose):
         #     yield msg
 
-    # def _solve_naked_pairs(self, sq, solved_pairs, verbose=False):
-    #     for sq2 in self.squares - solved_pairs:
-    #         if sq == sq2 or sq.possible_values != sq2.possible_values:
-    #             continue
-    #         for sq_set in (sq.enabled_sets & sq2.enabled_sets):
-    #             for sq3 in sq_set.squares:
-    #                 if sq3 != sq and sq3 != sq2:
-    #                     sq3.set_possible_values(
-    #                         sq3.possible_values - sq.possible_values)
-    #         solved_pairs.add(sq)
-    #         solved_pairs.add(sq2)
-    #         if verbose:
-    #             yield "solve naked pair {} + {}".format(sq.name, sq2.name)
+    def _solve_naked_pairs(self, sq, solved_pairs, verbose=False):
+        for sq2 in self.squares - solved_pairs:
+            if sq == sq2 or sq.possible_values != sq2.possible_values:
+                continue
+            for sq_set in (sq.enabled_sets & sq2.enabled_sets):
+                for sq3 in sq_set.squares:
+                    if sq3 != sq and sq3 != sq2:
+                        sq3.set_possible_values(
+                            sq3.possible_values - sq.possible_values)
+            solved_pairs.add(sq)
+            solved_pairs.add(sq2)
+            if verbose:
+                yield "solve naked pair {} + {}".format(sq.name, sq2.name)
 
     def _eliminate_via_projection(self, value, squares_with_value, verbose=False):
         """projection: if all of the squares including possible_value i within

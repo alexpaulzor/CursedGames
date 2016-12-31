@@ -45,26 +45,39 @@ class SudokuBoard(object):
             a bitmask of 1-shifted possible values as a 3-digit decimal.
             For instance, a square with possible values 1, 3, and 9 would be
             2**(1-1) + 2**(3-1) + 2**(9-1) = 261
+            This state is intended for use mostly internally
+
+            All characters not in
+            r'^[xm]?[.1-9]{81}([.1-9]{81}(([0-9]{3}|.[1-9]g){81})?)?'
+            are ignored, so whitespace/formatting does not matter.
         """
         if not line:
             line = '.' * N_4
+
         if not self.original_state:
             self.original_state = line
         if 'x' in line:
             self.set_x_regions(True)
-            line = line.translate(None, 'x')
+            # line = line.translate(None, 'x')
         else:
             self.set_x_regions(False)
         if 'm' in line:
             self.set_meta_regions(True)
-            line = line.translate(None, 'm')
+            # line = line.translate(None, 'm')
         else:
             self.set_meta_regions(False)
+        # purge irrelevant characters
+        line = line.replace('g', '.').replace('|', '')
+        for i, ch in enumerate(line):
+            if ch not in '123456789.':
+                line = line[:i] + line[i+1:]
+
         if len(line) not in (N_4, 2 * N_4, 5 * N_4):
             self.log("Invalid line: {} ({} ch)".format(line, len(line)))
             raise RuntimeError(
                 "Lines (excluding preceding extra region chars) "
-                "must be one of length {}".format((N_4, 2 * N_4, 5 * N_4)))
+                "must be one of length {} (yours was {})".format(
+                    (N_4, 2 * N_4, 5 * N_4), len(line)))
 
         self.clues = 0
         for y in range(N_2):
@@ -122,8 +135,8 @@ class SudokuBoard(object):
         if givens_only:
             return line
         if not include_possibles:
-            return line + line2
-        return line + line2 + line3
+            return "{}|{}".format(line, line2)
+        return "{}|{}|{}".format(line, line2, line3)
 
     def _possible_value_mask(self, sq):
         mask = 0

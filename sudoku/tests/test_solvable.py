@@ -10,7 +10,7 @@ def test_set_sol():
     pass
 
 
-def test_group_values():
+def test_hidden_pair():
     # From:
     ##=======+=======+=======#
     ## 1 2 3 |     3 |     3 #
@@ -51,17 +51,17 @@ def test_group_values():
                     (8,),  (3,4,6), (3,4,6),
                     (1,2), (9,),    (5,)]
 
+    _test_solve_iter(START_PVS, EXPECTED_PVS)
+
+def _test_solve_iter(start_pvs, expected_pvs):
     sector_set = ExclusiveSet("sector_2x2")
-    pvs = iter(START_PVS)
+    pvs = iter(start_pvs)
     squares = []
-    for y in range(3):
-        row = []
-        for x in range(3):
-            sq = Square(x, y)
-            sq.set_possible_values(set(next(pvs)))
-            row.append(sq)
-            sector_set.add_square(sq)
-        squares.append(row)
+    for y in range(9):
+        sq = Square(0, y)
+        sq.set_possible_values(set(next(pvs)))
+        squares.append(sq)
+        sector_set.add_square(sq)
 
     pprint(squares)
 
@@ -70,8 +70,31 @@ def test_group_values():
 
     pprint(squares)
 
-    expected_pvs = iter(EXPECTED_PVS)
-    for y in range(3):
-        for x in range(3):
-            pprint(squares[y][x])
-            assert squares[y][x].possible_values == set(next(expected_pvs))
+    expected_pvs_it = iter(expected_pvs)
+    for y in range(9):
+        pprint(squares[y])
+        assert squares[y].possible_values == set(next(expected_pvs_it))
+
+
+def test_hidden_pair_2():
+    # From:
+    #   2   |       |     3 #       | 1     |     3 #       |     3 |       #
+    #       | 4 5 6 |   5   #       |       | 4     #       |   5 6 |       # I
+    #       |       |       # 7     |       |       #   8   |       |     9 #
+    # To:
+    #   2   |       |     3 #       | 1     |     3 #       |     3 |       #
+    #       | 4 5 6 |   5   #       |       | 4     #       |   5   |       # I
+    #       |       |       # 7     |       |       #   8   |       |     9 #
+    START_PVS = [(2,), (4,5,6), (3,5), (7,), (1,), (3,4), (8,), (3,5,6), (9,)]
+    EXP_PVS =   [(2,), (4,5,6), (3,5), (7,), (1,), (3,4), (8,), (3,5),   (9,)]
+    _test_solve_iter(START_PVS, EXP_PVS)
+
+def test_triple():
+    # From:
+    #   2 3 |       |     3 #   2   |       |   2   #   2   | 1 2   | 1 2   #
+    #       |     6 |   5   # 4     |       | 4     #       | 4 5   | 4 5   #
+    #     9 |       |     9 # 7     |   8   | 7     # 7     | 7   9 |     9 #
+    # To:
+    #     3 |       |     3 #   2   |       |   2   #   2   | 1     | 1     #
+    #       |     6 |   5   # 4     |       | 4     #       |   5   |   5   #
+    #     9 |       |     9 # 7     |   8   | 7     # 7     |     9 |     9 #
