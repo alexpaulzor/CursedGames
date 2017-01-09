@@ -30,8 +30,8 @@ def play(puzzle, x_regions, meta_regions, verbose, generate):
 
     try:
         curses.wrapper(s.newgame)
-    # except Exception as e:
-    #     print repr(e)
+    except Exception as e:
+        print repr(e)
     finally:
         print "\n".join(s.board._log)
         print "initial: " + str(s.board.original_state)

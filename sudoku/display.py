@@ -423,6 +423,7 @@ class SudokuDisplay:
         last_state = self.board.current_state()
         last_msg_ineffective = False
         step_msgs = self.board.solve_step_iter(last_state, verbose=True)
+        last_status_clock = time.clock()
         for msg in step_msgs:
             state = self.board.current_state()
             msg = str(msg)
@@ -442,6 +443,8 @@ class SudokuDisplay:
                     wait = True
             last_state = state
 
+        if time.clock() - last_status_clock > 1:
+            last_status_clock = time.clock()
             self.draw_board()
 
     def save_state(self, log=True):
@@ -458,14 +461,14 @@ class SudokuDisplay:
         solver.load_game(self.board.current_state(givens_only=True))
         self.log("Computing solution...")
         last_status_clock = time.clock()
-        # try:
-        #     for msg in solver.solve_iter():
-        #         if time.clock() - last_status_clock > 1:
-        #             last_status_clock = time.clock()
-        #             self.log(msg, replace=True)
-        #             self.draw_board()
-        # except UnsolvableError:
-        #     pass
+        try:
+            for msg in solver.solve_iter():
+                if time.clock() - last_status_clock > 1:
+                    last_status_clock = time.clock()
+                    self.log(msg, replace=True)
+                    self.draw_board()
+        except UnsolvableError:
+            pass
         if not solver.is_solved():
             self.log("Bruteforcing...")
             for msg in solver.bruteforce_iter():

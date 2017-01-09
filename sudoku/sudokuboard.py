@@ -5,6 +5,8 @@ from solvable import Square, ExclusiveSet, N, N_2, N_4, UnsolvableError, ROW_LET
 MIN_CLUES = 19
 MAX_CLUES = 24
 
+MAX_LEVEL = N_2 * N  # 27
+
 # TODO: allow increased/decreased verbosity?
 YIELD_ITERS = 500
 
@@ -69,15 +71,17 @@ class SudokuBoard(object):
         # purge irrelevant characters
         line = line.replace('g', '.').replace('|', '')
         for i, ch in enumerate(line):
-            if ch not in '123456789.':
-                line = line[:i] + line[i+1:]
+            if ch not in '0123456789.':
+                line2 = line[:i] + line[i+1:]
+                self.log('"{}" => "{}"'.format(line, line2))
+                line = line2
 
         if len(line) not in (N_4, 2 * N_4, 5 * N_4):
             self.log("Invalid line: {} ({} ch)".format(line, len(line)))
             raise RuntimeError(
                 "Lines (excluding preceding extra region chars) "
-                "must be one of length {} (yours was {})".format(
-                    (N_4, 2 * N_4, 5 * N_4), len(line)))
+                "must be one of length {} (yours was {}: {})".format(
+                    (N_4, 2 * N_4, 5 * N_4), len(line), line))
 
         self.clues = 0
         for y in range(N_2):
@@ -269,6 +273,9 @@ class SudokuBoardSolver(SudokuBoard):
                 break
         if self.is_solved():
             return
+        if level > MAX_LEVEL:
+            yield "We're too deep..."
+            return
         inferred_state = self.current_state()
 
         yield ("lev {}: No more progress from solve_step: " +
@@ -278,6 +285,9 @@ class SudokuBoardSolver(SudokuBoard):
             if sq.get_value():
                 continue
             pv = list(sq.possible_values)
+            if len(pv) + level > MAX_LEVEL:
+                continue
+            shuffle(pv)
             pv_orig = pv[:]
             for i, v in enumerate(pv_orig):
                 self.load_game(inferred_state)
@@ -290,7 +300,8 @@ class SudokuBoardSolver(SudokuBoard):
                     if self.is_solved():
                         return
                 except UnsolvableError as ue:
-                    yield str(ue)
+                    if verbose:
+                        yield str(ue)
                     pv.remove(v)
                     # if not any(pv):
                     #     raise ue
@@ -402,17 +413,21 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             for sq in row:
                 sq.prepare_for_generate()
         self.log("gen: Computing solution...")
-        for msg in self.bruteforce_iter():
-            yield msg
+        # for msg in self.solve_iter(verbose=verbose):
+        #     yield msg
+        if not self.is_solved():
+            yield "Bruteforcing from " + self.current_state()
+            for msg in self.bruteforce_iter():
+                yield msg
         solution = self.current_state(include_possibles=False)
         if not self.is_solved():
             self.log("gen: Cannot solve! " + solution)
             return
 
-        def given_str(givens):
+        def given_str(g):
             return (('x' if self.x_regions else '') +
                     ('m' if self.meta_regions else '') +
-                    ''.join(givens))
+                    ''.join(g))
 
         givens = list(solution.translate(None, 'xm'))
         givens = ['.'] * N_4 + givens[81:]
@@ -430,13 +445,18 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             while any(all_squares) and (sq.is_given or not sq.get_value()):
                 self.log("gen: skipping {}".format(sq))
                 sq = all_squares.pop()
-            if not any(all_squares) or (
-                    len(all_squares) + len(given_squares) <= MIN_CLUES):
+            sq_val = sq.get_value()
+            if not any(all_squares) or len(given_squares) <= MIN_CLUES:
+                for sq in all_squares:
+                    if sq_val:
+                        sq.set_value(sq_val, True)
+                    givens[sq.id] = str(sq_val)
+                    givens[N_4 + sq.id] = str(sq_val)
+                    given_squares.add(sq)
                 self.log("gen: as: {!r} gs: {!r}".format(all_squares, given_squares))
                 break
             self.cursor_x = sq.x
             self.cursor_y = sq.y
-            sq_val = sq.get_value()
             sq.prevent_value(sq_val)
             msg = 'gen: [{} togo / {} clues] trying with {} != {}'.format(
                 len(all_squares), len(given_squares), str(sq), sq_val)
@@ -473,7 +493,7 @@ class SudokuBoardGenerator(SudokuBoardSolver):
             self.load_game(given_str(givens))
 
         self.log('gen: Done! ' + given_str(givens[:81]))
-        while any(all_squares):
+        while any(all_squares) and len(given_squares) < MIN_CLUES:
             sq = all_squares.pop()
             sq_val = sq.get_value()
             if not sq_val:
