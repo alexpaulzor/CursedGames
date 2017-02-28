@@ -5,8 +5,9 @@ import click
 
 import sys
 import time
-from sudokuboard import (SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4,
+from sudokuboard import (SudokuBoardSolver, N, N_2, N_4,
     ROW_LETTERS, UnsolvableError)
+from sudokugenerator import SudokuBoardGenerator
 import threading
 
 COLOR_SELECTED = 10

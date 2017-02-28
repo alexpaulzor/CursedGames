@@ -5,7 +5,8 @@ import click
 
 import sys
 import time
-from sudokuboard import SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4, UnsolvableError
+from sudokuboard import SudokuBoardSolver, N, N_2, N_4, UnsolvableError
+from sudokugenerator import SudokuBoardGenerator
 from display import SudokuDisplay
 import threading
 

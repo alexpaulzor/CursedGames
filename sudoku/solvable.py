@@ -126,11 +126,11 @@ class Square(object):
 
     def conflict_squares(self):
         sqs = set()
-        if self.is_unknown():
-            return sqs
+        # if self.is_unknown():
+        #     return sqs
         for s in self.enabled_sets:
             for square in s.squares:
-                if not square.is_unknown() and square != self:
+                if square != self:
                     sv = square.get_value()
                     if sv and sv in self.possible_values:
                         sqs.add(square)
