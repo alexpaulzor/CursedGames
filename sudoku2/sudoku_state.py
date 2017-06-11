@@ -1,3 +1,5 @@
+global N, N_2, N_3, N_4
+
 
 def set_N(n=3):
     global N, N_2, N_3, N_4
@@ -8,19 +10,26 @@ def set_N(n=3):
 
 set_N()
 
+
 class SudokuSquare:
     def __init__(self, value=None, bitmask=None):
         """
         >>> set_N(2)
+        >>> global N, N_2, N_3, N_4
         >>> SudokuSquare()
         None 0b1111
+
+        # >>> set_N(3)
+        # >>> SudokuSquare()
+        # None 0b111111111
         """
         if value:
             self.set_value(value)
         elif bitmask:
             self._value_bitmask = int(bitmask)
         else:
-            self._value_bitmask = N_4 - 1
+            self._value_bitmask = sum(
+                [self.value_to_bitmask(i + 1) for i in range(N_2)])
 
     @property
     def bitmask(self):
@@ -62,8 +71,25 @@ class SudokuSquare:
             return int(self.bitmask & other._value_bitmask)
         return int(self.bitmask & SudokuSquare.value_to_bitmask(other))
 
+    def subtract(self, other):
+        """
+        >>> s = SudokuSquare()
+        >>> s.subtract(SudokuSquare(value=3))
+        >>> s
+        None 0b1011
+        >>> s.subtract(SudokuSquare(value=2))
+        >>> s
+        None 0b1001
+        >>> s.subtract(SudokuSquare(value=1))
+        >>> s
+        4 0b1000
+        """
+        if (self != other and other.known_value and
+            self.value_to_bitmask(other.known_value) & self._value_bitmask > 0):
+            self._value_bitmask -= self.value_to_bitmask(other.known_value)
+
     def __isub__(self, other):
-        self._value_bitmask &= other.bitmask
+        self.subtract(other)
 
     def state_lines(self):
         """
@@ -125,6 +151,11 @@ class SudokuState:
     def sets(self):
         return self.board.sets(self)
 
+    def __eq__(self, other):
+        for i, my_sq in enumerate(self.squares):
+            if my_sq.bitmask != other.squares[i].bitmask:
+                return False
+
 
 class SudokuBoard:
     def __init__(self):
@@ -136,9 +167,8 @@ class SudokuBoard:
 
     def sets(self, state):
         for constraint in self.constraints:
-            for sq_set in constraint.sets_iter(state):
-                if any(sq_set):
-                    yield sq_set
+            for sq_set in constraint.groups_iter(state):
+                yield set(sq_set)
 
 
 class SudokuBoardConstraint:
@@ -310,49 +340,23 @@ class StatePrinter:
     @classmethod
     def print_board_state(cls, state):
         """
-        >>> set_N(3)
+        >>> set_N(2)
         >>> board = SudokuBoard()
         >>> squares = [SudokuSquare(bitmask=i) for i in range(N_4)]
-        >>> print str(squares)
-        [None 0b001010000, 1 0b000000001, 2 0b000000010, None 0b000000011, 3 0b000000100, None 0b000000101, None 0b000000110, None 0b000000111, 4 0b000001000, None 0b000001001, None 0b000001010, None 0b000001011, None 0b000001100, None 0b000001101, None 0b000001110, None 0b000001111, 5 0b000010000, None 0b000010001, None 0b000010010, None 0b000010011, None 0b000010100, None 0b000010101, None 0b000010110, None 0b000010111, None 0b000011000, None 0b000011001, None 0b000011010, None 0b000011011, None 0b000011100, None 0b000011101, None 0b000011110, None 0b000011111, 6 0b000100000, None 0b000100001, None 0b000100010, None 0b000100011, None 0b000100100, None 0b000100101, None 0b000100110, None 0b000100111, None 0b000101000, None 0b000101001, None 0b000101010, None 0b000101011, None 0b000101100, None 0b000101101, None 0b000101110, None 0b000101111, None 0b000110000, None 0b000110001, None 0b000110010, None 0b000110011, None 0b000110100, None 0b000110101, None 0b000110110, None 0b000110111, None 0b000111000, None 0b000111001, None 0b000111010, None 0b000111011, None 0b000111100, None 0b000111101, None 0b000111110, None 0b000111111, 7 0b001000000, None 0b001000001, None 0b001000010, None 0b001000011, None 0b001000100, None 0b001000101, None 0b001000110, None 0b001000111, None 0b001001000, None 0b001001001, None 0b001001010, None 0b001001011, None 0b001001100, None 0b001001101, None 0b001001110, None 0b001001111, None 0b001010000]
         >>> StatePrinter.print_board_state(SudokuState(squares=squares, board=board))  # noqa
-        #=====+=====+=====#=====+=====+=====#=====+=====+=====#
-        #     | 1   |  2  # 12  |   3 | 1 3 #  23 | 123 |     #
-        #  5  |     |     #     |     |     #     |     | 4   #
-        # 7   |     |     #     |     |     #     |     |     #
-        #-----+-----+-----#-----+-----+-----#-----+-----+-----#
-        # 1   |  2  | 12  #   3 | 1 3 |  23 # 123 |     | 1   #
-        # 4   | 4   | 4   # 4   | 4   | 4   # 4   |  5  |  5  #
-        #     |     |     #     |     |     #     |     |     #
-        #=====+=====+=====#=====+=====+=====#=====+=====+=====#
-        #  2  | 12  |   3 # 1 3 |  23 | 123 #     | 1   |  2  #
-        #  5  |  5  |  5  #  5  |  5  |  5  # 45  | 45  | 45  #
-        #     |     |     #     |     |     #     |     |     #
-        #-----+-----+-----#-----+-----+-----#-----+-----+-----#
-        # 12  |   3 | 1 3 #  23 | 123 |     # 1   |  2  | 12  #
-        # 45  | 45  | 45  # 45  | 45  |   6 #   6 |   6 |   6 #
-        #     |     |     #     |     |     #     |     |     #
-        #-----+-----+-----#-----+-----+-----#-----+-----+-----#
-        #   3 | 1 3 |  23 # 123 |     | 1   #  2  | 12  |   3 #
-        #   6 |   6 |   6 #   6 | 4 6 | 4 6 # 4 6 | 4 6 | 4 6 #
-        #     |     |     #     |     |     #     |     |     #
-        #=====+=====+=====#=====+=====+=====#=====+=====+=====#
-        # 1 3 |  23 | 123 #     | 1   |  2  # 12  |   3 | 1 3 #
-        # 4 6 | 4 6 | 4 6 #  56 |  56 |  56 #  56 |  56 |  56 #
-        #     |     |     #     |     |     #     |     |     #
-        #-----+-----+-----#-----+-----+-----#-----+-----+-----#
-        #  23 | 123 |     # 1   |  2  | 12  #   3 | 1 3 |  23 #
-        #  56 |  56 | 456 # 456 | 456 | 456 # 456 | 456 | 456 #
-        #     |     |     #     |     |     #     |     |     #
-        #-----+-----+-----#-----+-----+-----#-----+-----+-----#
-        # 123 |     | 1   #  2  | 12  |   3 # 1 3 |  23 | 123 #
-        # 456 |     |     #     |     |     #     |     |     #
-        #     | 7   | 7   # 7   | 7   | 7   # 7   | 7   | 7   #
-        #=====+=====+=====#=====+=====+=====#=====+=====+=====#
-        #     | 1   |  2  # 12  |   3 | 1 3 #  23 | 123 |     #
-        # 4   | 4   | 4   # 4   | 4   | 4   # 4   | 4   |  5  #
-        # 7   | 7   | 7   # 7   | 7   | 7   # 7   | 7   | 7   #
-        #-----+-----+-----#-----+-----+-----#-----+-----+-----#
+        #====+====#====+====#
+        # 12 | 1  #  2 | 12 #
+        # 34 |    #    |    #
+        #----+----#----+----#
+        #    | 1  #  2 | 12 #
+        # 3  | 3  # 3  | 3  #
+        #====+====#====+====#
+        #    | 1  #  2 | 12 #
+        #  4 |  4 #  4 |  4 #
+        #----+----#----+----#
+        #    | 1  #  2 | 12 #
+        # 34 | 34 # 34 | 34 #
+        #====+====#====+====#
         """
         print cls.major_line_sep()
         for rowno, line in enumerate(StatePrinter._get_board_lines(state)):
