@@ -66,6 +66,9 @@ class SudokuSquare:
     def set_value(self, value):
         self._value_bitmask = SudokuSquare.value_to_bitmask(value)
 
+    def set_bitmask(self, bitmask):
+        self._value_bitmask = bitmask
+
     def __and__(self, other):
         if isinstance(other, SudokuSquare):
             return int(self.bitmask & other._value_bitmask)
@@ -155,6 +158,13 @@ class SudokuState:
         for i, my_sq in enumerate(self.squares):
             if my_sq.bitmask != other.squares[i].bitmask:
                 return False
+        return True
+
+    def __sub__(self, other):
+        diff_state = self.copy()
+        for i, my_sq in enumerate(self.squares):
+            diff_state.squares[i].set_bitmask(abs(my_sq.bitmask - other.squares[i].bitmask))
+        return diff_state
 
 
 class SudokuBoard:
@@ -365,6 +375,11 @@ class StatePrinter:
                 print cls.major_line_sep()
             else:
                 print cls.line_sep()
+
+    @classmethod
+    def print_board_diff(cls, state1, state2):
+        state3 = state2 - state1
+        cls.print_board_state(state3)
 
     @classmethod
     def _get_board_lines(cls, state):

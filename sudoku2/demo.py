@@ -10,14 +10,19 @@ squares = [SudokuSquare() for i in range(N_4)]
 print str(squares)
 state = SudokuState(squares=squares, board=board)
 StatePrinter.print_board_state(state)
-for v, i in enumerate(range(0, N_4, N_2 + 1)):
-    squares[i].set_value(v+1)
+for i in range(N_2):
+    squares[i].set_value(i+1)
 state = SudokuState(squares=squares, parent=state)
 StatePrinter.print_board_state(state)
 
-print "EliminateValues"
-eliminated = EliminateValues.apply(state)
-StatePrinter.print_board_state(eliminated)
+for i in range(30):
+    print "EliminateValues {}".format(i)
+    eliminated = EliminateValues.apply(state)
+    # StatePrinter.print_board_state(eliminated)
+    StatePrinter.print_board_diff(eliminated, state)
+    if eliminated == state:
+        break
+    state = eliminated
 
 # print "EliminateValues"
 # eliminated = EliminateValues.apply(state)

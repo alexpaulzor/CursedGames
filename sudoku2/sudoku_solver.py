@@ -26,7 +26,9 @@ class SudokuSolverTechnique:
         new_state = state.copy(transition_technique=cls)
         cls.apply_to_sets(new_state.sets)
         cls.apply_to_squares(new_state.squares)
-        return new_state
+        if new_state != state:
+            return new_state
+        return state
 
     @classmethod
     def apply_to_sets(cls, sets):
