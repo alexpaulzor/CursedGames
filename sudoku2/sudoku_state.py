@@ -1,6 +1,5 @@
 global N, N_2, N_3, N_4
 
-
 def set_N(n=3):
     global N, N_2, N_3, N_4
     N = n          # 2  # 3
@@ -337,6 +336,9 @@ class SectorConstraint(SudokuBoardConstraint):
             yield squares
 
 
+ROW_LETTERS = 'ABCDEFGHI'
+
+
 class StatePrinter:
     @classmethod
     def line_sep(cls):
@@ -345,7 +347,6 @@ class StatePrinter:
     @classmethod
     def major_line_sep(cls):
         return ('#' + '+'.join(['=' * (2 + N)] * N)) * N + '#'
-
 
     @classmethod
     def print_board_state(cls, state):
@@ -371,7 +372,7 @@ class StatePrinter:
         print cls.major_line_sep()
         for rowno, line in enumerate(StatePrinter._get_board_lines(state)):
             print line
-            if rowno % N == 1:
+            if (rowno + 1) % N == 0:
                 print cls.major_line_sep()
             else:
                 print cls.line_sep()
