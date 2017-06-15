@@ -1,5 +1,5 @@
 
-from sudoku_state import set_N, SudokuBoard, SudokuSquare, StatePrinter, SudokuState
+from sudoku_state import set_N, N_2, SudokuSquare, StatePrinter, SudokuState, SudokuBoard
 
 
 class InvalidStateError(Exception):
@@ -63,38 +63,38 @@ class EliminateValues(SudokuSolverTechnique):
         >>> set_N(2)
         >>> from sudoku_state import N, N_2, N_3, N_4
         >>> board = SudokuBoard()
-        >>> squares = [SudokuSquare() for i in range(N_4)]
+        >>> squares = [SudokuSquare(id=i) for i in range(N_4)]
         >>> state = SudokuState(squares=squares, board=board)
         >>> StatePrinter.print_board_state(state)
         #====+====#====+====#
-        # 12 | 12 # 12 | 12 #
-        # 34 | 34 # 34 | 34 #
+        #    |    #    |    #
+        #    |    #    |    #
         #----+----#----+----#
-        # 12 | 12 # 12 | 12 #
-        # 34 | 34 # 34 | 34 #
+        #    |    #    |    #
+        #    |    #    |    #
         #====+====#====+====#
-        # 12 | 12 # 12 | 12 #
-        # 34 | 34 # 34 | 34 #
+        #    |    #    |    #
+        #    |    #    |    #
         #----+----#----+----#
-        # 12 | 12 # 12 | 12 #
-        # 34 | 34 # 34 | 34 #
+        #    |    #    |    #
+        #    |    #    |    #
         #====+====#====+====#
         >>> for v, i in enumerate(range(0, N_4, N_2 + 1)):
         ...     squares[i].set_value(v+1)
         >>> state = SudokuState(squares=squares, parent=state)
         >>> StatePrinter.print_board_state(state)
         #====+====#====+====#
-        # 1  | 12 # 12 | 12 #
-        #    | 34 # 34 | 34 #
+        # 1  |    #    |    #
+        #    |    #    |    #
         #----+----#----+----#
-        # 12 |  2 # 12 | 12 #
-        # 34 |    # 34 | 34 #
+        #    |  2 #    |    #
+        #    |    #    |    #
         #====+====#====+====#
-        # 12 | 12 #    | 12 #
-        # 34 | 34 # 3  | 34 #
+        #    |    #    |    #
+        #    |    # 3  |    #
         #----+----#----+----#
-        # 12 | 12 # 12 |    #
-        # 34 | 34 # 34 |  4 #
+        #    |    #    |    #
+        #    |    #    |  4 #
         #====+====#====+====#
         >>> state = EliminateValues.apply(state)
         >>> StatePrinter.print_board_state(state)
@@ -113,9 +113,39 @@ class EliminateValues(SudokuSolverTechnique):
         #====+====#====+====#
         """
         for sq_set in sets:
+            sqs_with_val = {}
+            sqs_by_bitmask = {}
             for sq in iter(sq_set):
                 for sq2 in iter(sq_set):
-                    sq.subtract(sq2)
+                    if sq2.known_value:
+                        sq.eliminate(sq2)
+
+                pvals = sq.possible_values()
+
+                if sq.bitmask not in sqs_by_bitmask:
+                    sqs_by_bitmask[sq.bitmask] = []
+                sqs_by_bitmask[sq.bitmask].append(sq)
+
+                for val in pvals:
+                    if val not in sqs_with_val:
+                        sqs_with_val[val] = []
+                    sqs_with_val[val].append(sq)
+
+            for val, sqs in sqs_with_val.iteritems():
+                if len(sqs) == 1:
+                    #print "Found unique value {} for {}".format(val, sqs[0])
+                    sqs[0].set_value(val)
+
+            for bm, sqs in sqs_by_bitmask.iteritems():
+                if len(sqs) > 1:
+                    pvals = list(SudokuSquare.bitmask_to_possible_values(bm))
+                    if len(sqs) == len(pvals):
+                        for sq in iter(sq_set):
+                            if sq not in sqs:
+                                sq.eliminate(sqs[0])
+
+
+
 
 
 class SudokuSolver:
@@ -136,6 +166,7 @@ class SudokuSolver:
                 self._current_state = t.apply(prev_state)
                 if self._current_state != prev_state:
                     yield self._current_state
+        yield self._current_state
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+import sys
+
 global N, N_2, N_3, N_4
 
 def set_N(n=3):
@@ -13,17 +15,14 @@ set_N()
 
 class SudokuSquare:
 
-    def __init__(self, value=None, bitmask=None):
+    def __init__(self, value=None, bitmask=None, id=None):
         """
         >>> set_N(2)
         >>> global N, N_2, N_3, N_4
         >>> SudokuSquare()
-        None 0b1111
-
-        # >>> set_N(3)
-        # >>> SudokuSquare()
-        # None 0b111111111
+        sq#None 1234
         """
+        self._id = id
         if value:
             self.set_value(value)
         elif bitmask:
@@ -81,25 +80,39 @@ class SudokuSquare:
             return int(self.bitmask & other._value_bitmask)
         return int(self.bitmask & SudokuSquare.value_to_bitmask(other))
 
-    def subtract(self, other):
+    @classmethod
+    def bitmask_to_possible_values(cls, bmask):
+        for i in range(N_2):
+            mask = SudokuSquare.value_to_bitmask(i + 1)
+            if mask & bmask == mask:
+                yield i + 1
+
+    def possible_values(self):
+        return self.bitmask_to_possible_values(self.bitmask)
+
+    def eliminate(self, other):
         """
         >>> s = SudokuSquare()
-        >>> s.subtract(SudokuSquare(value=3))
+        >>> s.eliminate(SudokuSquare(value=3))
         >>> s
-        None 0b1011
-        >>> s.subtract(SudokuSquare(value=2))
+        sq#None 124
+        >>> s.eliminate(SudokuSquare(value=2))
         >>> s
-        None 0b1001
-        >>> s.subtract(SudokuSquare(value=1))
+        sq#None 14
+        >>> s.eliminate(SudokuSquare(value=1))
         >>> s
-        4 0b1000
+        sq#None 4
+        >>> s2 = SudokuSquare()
+        >>> s2.eliminate(SudokuSquare(bitmask=0b1101))
+        >>> s2
+        sq#None 2
         """
-        if (self != other and other.known_value and
-            self.value_to_bitmask(other.known_value) & self._value_bitmask > 0):
-            self._value_bitmask -= self.value_to_bitmask(other.known_value)
+        if (self != other and
+            other.bitmask & self._value_bitmask > 0):
+            self._value_bitmask -= other.bitmask & self._value_bitmask
 
     def __isub__(self, other):
-        self.subtract(other)
+        self.eliminate(other)
 
     def state_lines(self):
         """
@@ -111,9 +124,9 @@ class SudokuSquare:
         >>> bm_4 = SudokuSquare.value_to_bitmask(4)
         >>> square = SudokuSquare(bitmask=bm_1 | bm_2 | bm_3 | bm_4)
         >>> square
-        None 0b1111
+        sq#None 1234
         >>> ','.join(square.state_lines())
-        '12,34'
+        '  ,  '
         """
         if self.bitmask == SudokuSquare.full_bitmask():
             return [' ' * N] * N
@@ -130,16 +143,16 @@ class SudokuSquare:
         return str(self)
 
     def __str__(self):
-        return ("{} 0b{:0" + str(N_2) + "b}").format(
-            SudokuSquare.bitmask_to_known_value(self._value_bitmask),
-            self.bitmask)
+        return ("sq#{} {}").format(
+            self._id,
+            ''.join([str(v) for v in self.possible_values()]))
 
 
 class SudokuState:
     def __init__(self, squares=None, parent=None, transition_technique=None,
                  board=None):
         if not squares:
-            squares = [SudokuSquare() for i in range(N_4)]
+            squares = [SudokuSquare(id=i) for i in range(N_4)]
         self.squares = squares
         self.parent = parent
         self.transition_technique = transition_technique
@@ -153,7 +166,7 @@ class SudokuState:
             self.board = board
 
     def copy(self, transition_technique=None):
-        squares = [SudokuSquare(bitmask=sq.bitmask) for sq in self.squares]
+        squares = [SudokuSquare(bitmask=sq.bitmask, id=sq._id) for sq in self.squares]
         return SudokuState(
             squares=squares, parent=self,
             transition_technique=transition_technique)
@@ -172,6 +185,9 @@ class SudokuState:
                 return False
         return True
 
+    def __neq__(self, other):
+        return not self == other
+
     def __sub__(self, other):
         diff_state = self.copy()
         for i, my_sq in enumerate(self.squares):
@@ -179,7 +195,7 @@ class SudokuState:
         return diff_state
 
     def __str__(self):
-        return "{} {}".format(self._id, self.squares)
+        return "st#{} {}".format(self._id, self.squares)
 
 
 class SudokuBoard:
@@ -213,14 +229,14 @@ class RowConstraint(SudokuBoardConstraint):
         >>> state = SudokuState(squares=squares, board=board)
         >>> StatePrinter.print_board_state(state)
         #====+====#====+====#
-        # 12 | 1  #  2 |    #
-        # 34 |    #    | 3  #
+        #    | 1  #  2 |    #
+        #    |    #    | 3  #
         #----+----#----+----#
         #    |    #    |    #
         #  4 |    #    |    #
         #====+====#====+====#
-        #    | 12 # 1  |  2 #
-        #    | 34 #    |    #
+        #    |    # 1  |  2 #
+        #    |    #    |    #
         #----+----#----+----#
         #    |    #    |    #
         # 3  |  4 #    |    #
@@ -228,16 +244,16 @@ class RowConstraint(SudokuBoardConstraint):
         >>> groups = list(RowConstraint.groups_iter(state))
         >>> [StatePrinter.print_square_set(g) for g in groups]
         #====+====#====+====#
-        | 12 | 1  |  2 |    |
-        | 34 |    |    | 3  |
+        |    | 1  |  2 |    |
+        |    |    |    | 3  |
         #====+====#====+====#
         #====+====#====+====#
         |    |    |    |    |
         |  4 |    |    |    |
         #====+====#====+====#
         #====+====#====+====#
-        |    | 12 | 1  |  2 |
-        |    | 34 |    |    |
+        |    |    | 1  |  2 |
+        |    |    |    |    |
         #====+====#====+====#
         #====+====#====+====#
         |    |    |    |    |
@@ -261,14 +277,14 @@ class ColumnConstraint(SudokuBoardConstraint):
         >>> state = SudokuState(squares=squares, board=board)
         >>> StatePrinter.print_board_state(state)
         #====+====#====+====#
-        # 12 | 1  #  2 |    #
-        # 34 |    #    | 3  #
+        #    | 1  #  2 |    #
+        #    |    #    | 3  #
         #----+----#----+----#
         #    |    #    |    #
         #  4 |    #    |    #
         #====+====#====+====#
-        #    | 12 # 1  |  2 #
-        #    | 34 #    |    #
+        #    |    # 1  |  2 #
+        #    |    #    |    #
         #----+----#----+----#
         #    |    #    |    #
         # 3  |  4 #    |    #
@@ -276,12 +292,12 @@ class ColumnConstraint(SudokuBoardConstraint):
         >>> groups = list(ColumnConstraint.groups_iter(state))
         >>> [StatePrinter.print_square_set(g) for g in groups]
         #====+====#====+====#
-        | 12 |    |    |    |
-        | 34 |  4 |    | 3  |
+        |    |    |    |    |
+        |    |  4 |    | 3  |
         #====+====#====+====#
         #====+====#====+====#
-        | 1  |    | 12 |    |
-        |    |    | 34 |  4 |
+        | 1  |    |    |    |
+        |    |    |    |  4 |
         #====+====#====+====#
         #====+====#====+====#
         |  2 |    | 1  |    |
@@ -307,14 +323,14 @@ class SectorConstraint(SudokuBoardConstraint):
         >>> state = SudokuState(squares=squares, board=board)
         >>> StatePrinter.print_board_state(state)
         #====+====#====+====#
-        # 12 | 1  #  2 |    #
-        # 34 |    #    | 3  #
+        #    | 1  #  2 |    #
+        #    |    #    | 3  #
         #----+----#----+----#
         #    |    #    |    #
         #  4 |    #    |    #
         #====+====#====+====#
-        #    | 12 # 1  |  2 #
-        #    | 34 #    |    #
+        #    |    # 1  |  2 #
+        #    |    #    |    #
         #----+----#----+----#
         #    |    #    |    #
         # 3  |  4 #    |    #
@@ -322,16 +338,16 @@ class SectorConstraint(SudokuBoardConstraint):
         >>> groups = list(SectorConstraint.groups_iter(state))
         >>> [StatePrinter.print_square_set(g) for g in groups]
         #====+====#====+====#
-        | 12 | 1  |    |    |
-        | 34 |    |  4 |    |
+        |    | 1  |    |    |
+        |    |    |  4 |    |
         #====+====#====+====#
         #====+====#====+====#
         |  2 |    |    |    |
         |    | 3  |    |    |
         #====+====#====+====#
         #====+====#====+====#
-        |    | 12 |    |    |
-        |    | 34 | 3  |  4 |
+        |    |    |    |    |
+        |    |    | 3  |  4 |
         #====+====#====+====#
         #====+====#====+====#
         | 1  |  2 |    |    |
@@ -365,15 +381,15 @@ class StatePrinter:
         return ('#' + '+'.join(['=' * (2 + N)] * N)) * N + '#'
 
     @classmethod
-    def print_board_state(cls, state, prefix=' '):
+    def print_board_state(cls, state):
         """
         >>> set_N(2)
         >>> board = SudokuBoard()
         >>> squares = [SudokuSquare(bitmask=i) for i in range(N_4)]
         >>> StatePrinter.print_board_state(SudokuState(squares=squares, board=board))  # noqa
         #====+====#====+====#
-        # 12 | 1  #  2 | 12 #
-        # 34 |    #    |    #
+        #    | 1  #  2 | 12 #
+        #    |    #    |    #
         #----+----#----+----#
         #    | 1  #  2 | 12 #
         # 3  | 3  # 3  | 3  #
@@ -381,12 +397,12 @@ class StatePrinter:
         #    | 1  #  2 | 12 #
         #  4 |  4 #  4 |  4 #
         #----+----#----+----#
-        #    | 1  #  2 | 12 #
-        # 34 | 34 # 34 | 34 #
+        #    | 1  #  2 |    #
+        # 34 | 34 # 34 |    #
         #====+====#====+====#
         """
         print cls.major_line_sep()
-        for rowno, line in enumerate(StatePrinter._get_board_lines(state, prefix=prefix)):
+        for rowno, line in enumerate(StatePrinter._get_board_lines(state)):
             print line
             if (rowno + 1) % N == 0:
                 print cls.major_line_sep()
@@ -395,17 +411,36 @@ class StatePrinter:
 
     @classmethod
     def print_board_diff(cls, state1, state2):
-        state3 = state2 - state1
-        cls.print_board_state(state3, prefix='-')
+        diff_state = state2 - state1
+        state1_lines = '\n'.join(StatePrinter._get_board_lines(state1)).split('\n')
+        state2_lines = '\n'.join(StatePrinter._get_board_lines(state2)).split('\n')
+        diff_state_lines = '\n'.join(StatePrinter._get_board_lines(diff_state, prefix='-')).split('\n')
+
+        sys.stdout.write(' -> '.join([cls.major_line_sep() for i in range(3)]))
+        sys.stdout.write('\n')
+
+        for rowno, line in enumerate(state1_lines):
+            sys.stdout.write(' -> '.join([line, diff_state_lines[rowno], state2_lines[rowno]]))
+            sys.stdout.write('\n')
+            if (rowno + 1) % N == 0 and (rowno / N + 1) % N == 0:
+                sep = cls.major_line_sep()
+            elif (rowno + 1) % N == 0:
+                sep = cls.line_sep()
+            else:
+                sep = None
+
+            if sep:
+                sys.stdout.write(' -> '.join([sep for i in range(3)]))
+                sys.stdout.write('\n')
 
     @classmethod
     def _get_board_lines(cls, state, prefix=' '):
-        """
+        r"""
         >>> set_N(2)
         >>> board = SudokuBoard()
         >>> squares = [SudokuSquare(value=(i % N_2)) for i in range(N_4)]
         >>> list(StatePrinter._get_board_lines(SudokuState(squares=squares, board=board)))  # noqa
-        ['# 12 | 1  #  2 |    #\\n# 34 |    #    | 3  #', '#    |    #    |    #\\n#  4 |    #    |    #', '#    | 12 # 1  |  2 #\\n#    | 34 #    |    #', '#    |    #    |    #\\n# 3  |  4 #    |    #']
+        ['#    | 1  #  2 |    #\n#    |    #    | 3  #', '#    |    #    |    #\n#  4 |    #    |    #', '#    |    # 1  |  2 #\n#    |    #    |    #', '#    |    #    |    #\n# 3  |  4 #    |    #']
         """
         for y in range(N_2):
             for row in cls._get_row_lines(
