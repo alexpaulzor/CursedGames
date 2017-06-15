@@ -10,7 +10,9 @@ def set_N(n=3):
 set_N()
 
 
+
 class SudokuSquare:
+
     def __init__(self, value=None, bitmask=None):
         """
         >>> set_N(2)
@@ -27,8 +29,7 @@ class SudokuSquare:
         elif bitmask:
             self._value_bitmask = int(bitmask)
         else:
-            self._value_bitmask = sum(
-                [self.value_to_bitmask(i + 1) for i in range(N_2)])
+            self._value_bitmask = self.full_bitmask()
 
     @property
     def bitmask(self):
@@ -58,12 +59,19 @@ class SudokuSquare:
             return None
         return v
 
+    @classmethod
+    def full_bitmask(cls):
+        return sum([SudokuSquare.value_to_bitmask(i + 1) for i in range(N_2)])
+
     @property
     def known_value(self):
         return SudokuSquare.bitmask_to_known_value(self.bitmask)
 
     def set_value(self, value):
-        self._value_bitmask = SudokuSquare.value_to_bitmask(value)
+        if value > 0:
+            self._value_bitmask = SudokuSquare.value_to_bitmask(value)
+        else:
+            self._value_bitmask = self.full_bitmask()
 
     def set_bitmask(self, bitmask):
         self._value_bitmask = bitmask
@@ -107,6 +115,8 @@ class SudokuSquare:
         >>> ','.join(square.state_lines())
         '12,34'
         """
+        if self.bitmask == SudokuSquare.full_bitmask():
+            return [' ' * N] * N
         return tuple(self._state_line_iter())
 
     def _state_line_iter(self):
@@ -134,8 +144,11 @@ class SudokuState:
         self.parent = parent
         self.transition_technique = transition_technique
 
+        self._id = 0
+
         if parent:
             self.board = parent.board
+            self._id = parent._id + 1
         elif board:
             self.board = board
 
@@ -164,6 +177,9 @@ class SudokuState:
         for i, my_sq in enumerate(self.squares):
             diff_state.squares[i].set_bitmask(abs(my_sq.bitmask - other.squares[i].bitmask))
         return diff_state
+
+    def __str__(self):
+        return "{} {}".format(self._id, self.squares)
 
 
 class SudokuBoard:
@@ -349,7 +365,7 @@ class StatePrinter:
         return ('#' + '+'.join(['=' * (2 + N)] * N)) * N + '#'
 
     @classmethod
-    def print_board_state(cls, state):
+    def print_board_state(cls, state, prefix=' '):
         """
         >>> set_N(2)
         >>> board = SudokuBoard()
@@ -370,7 +386,7 @@ class StatePrinter:
         #====+====#====+====#
         """
         print cls.major_line_sep()
-        for rowno, line in enumerate(StatePrinter._get_board_lines(state)):
+        for rowno, line in enumerate(StatePrinter._get_board_lines(state, prefix=prefix)):
             print line
             if (rowno + 1) % N == 0:
                 print cls.major_line_sep()
@@ -380,10 +396,10 @@ class StatePrinter:
     @classmethod
     def print_board_diff(cls, state1, state2):
         state3 = state2 - state1
-        cls.print_board_state(state3)
+        cls.print_board_state(state3, prefix='-')
 
     @classmethod
-    def _get_board_lines(cls, state):
+    def _get_board_lines(cls, state, prefix=' '):
         """
         >>> set_N(2)
         >>> board = SudokuBoard()
@@ -394,7 +410,8 @@ class StatePrinter:
         for y in range(N_2):
             for row in cls._get_row_lines(
                     state.squares[SudokuState.square_index(0, y):
-                                  SudokuState.square_index(0, y + 1)]):
+                                  SudokuState.square_index(0, y + 1)],
+                    prefix=prefix):
                 yield row
 
     @classmethod
@@ -405,12 +422,13 @@ class StatePrinter:
         print cls.major_line_sep()
 
     @classmethod
-    def _get_row_lines(cls, squares, major_sep='#'):
+    def _get_row_lines(cls, squares, major_sep='#', prefix=' '):
         row_lines = [''] * N
         for x, sq in enumerate(squares):
             for lino, sqline in enumerate(sq.state_lines()):
                 sep = major_sep if x % N == 0 else '|'
-                row_lines[lino] += sep + ' {} '.format(sqline)
+                pfix = prefix if any(sqline.strip()) else ' '
+                row_lines[lino] += sep + '{}{} '.format(pfix, sqline)
         yield (major_sep + '\n').join(row_lines) + major_sep
 
 

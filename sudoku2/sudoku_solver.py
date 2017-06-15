@@ -26,9 +26,9 @@ class SudokuSolverTechnique:
         new_state = state.copy(transition_technique=cls)
         cls.apply_to_sets(new_state.sets)
         cls.apply_to_squares(new_state.squares)
-        if new_state != state:
-            return new_state
-        return state
+        if new_state == state:
+            return state
+        return new_state
 
     @classmethod
     def apply_to_sets(cls, sets):
@@ -116,6 +116,27 @@ class EliminateValues(SudokuSolverTechnique):
             for sq in iter(sq_set):
                 for sq2 in iter(sq_set):
                     sq.subtract(sq2)
+
+
+class SudokuSolver:
+    TECHNIQUES = [
+        ValidatorTechnique,
+        EliminateValues
+    ]
+
+    def __init__(self, initial_state):
+        self._initial_state = initial_state
+        self._current_state = initial_state
+
+    def solve_iter(self):
+        for t in SudokuSolver.TECHNIQUES:
+            prev_state = None
+            while prev_state != self._current_state:
+                prev_state = self._current_state
+                self._current_state = t.apply(prev_state)
+                if self._current_state != prev_state:
+                    yield self._current_state
+
 
 if __name__ == "__main__":
     import doctest
