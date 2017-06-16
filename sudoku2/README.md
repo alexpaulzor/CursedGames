@@ -15,3 +15,4 @@ Alright, let's try this thing again. This time with at least a tiny bit of desig
     * Different board styles (x, meta, and eventually squiggly) can extend the
 * The generator can utilize solver functions in sequence to construct linked chains of moves
 * Bonus: support squiggly puzzles
+* Document O() runtime for solver techniques

@@ -5,9 +5,9 @@ from sudoku_state import N, N_2, N_3, N_4
 
 from sudoku_solver import EliminateValues, ValidatorTechnique, SudokuSolver
 
-#values = "790000300000006900800030076000005002005418700400700000610090008002300000009000054"
+#values = "790000300000006900800030076000005002005418700400700000610090008002300000009000054" # noqa
 
-values = "...71....5..............53.16..2.3......3...9.456......9.2...7.6.....2.3.....6.81"
+values = "...71....5..............53.16..2.3......3...9.456......9.2...7.6.....2.3.....6.81"  # noqa
 
 
 values = values.replace('.', '0').replace(' ', '0')
@@ -16,18 +16,20 @@ board = SudokuBoard()
 squares = [SudokuSquare(value=int(values[i]), id=i) for i in range(N_4)]
 print str(squares)
 state = SudokuState(squares=squares, board=board)
-StatePrinter.print_board_state(state)
+StatePrinter.print_board_state(state, color=True)
 
 solver = SudokuSolver(state)
 
 for newstate in solver.solve_iter():
     if newstate and newstate.parent:
-        print "{} -> {} -> {}".format(newstate.parent._id, newstate.transition_technique, newstate._id)
+        print "{} -> {} -> {}".format(
+            newstate.parent._id, newstate.transition_technique, newstate._id)
         StatePrinter.print_board_diff(newstate.parent, newstate)
     else:
-        StatePrinter.print_board_state(newstate)
+        StatePrinter.print_board_state(newstate, color=True)
 
-StatePrinter.print_board_state(solver._current_state)
+StatePrinter.print_board_state(solver._current_state, color=True)
+StatePrinter.print_playable_state(solver._current_state)
 
 # # for i in range(N_2):
 # #     squares[N_2 * i + i].set_value(i+1)

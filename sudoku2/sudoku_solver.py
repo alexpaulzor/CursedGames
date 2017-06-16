@@ -133,7 +133,6 @@ class EliminateValues(SudokuSolverTechnique):
 
             for val, sqs in sqs_with_val.iteritems():
                 if len(sqs) == 1:
-                    #print "Found unique value {} for {}".format(val, sqs[0])
                     sqs[0].set_value(val)
 
             for bm, sqs in sqs_by_bitmask.iteritems():
@@ -143,9 +142,6 @@ class EliminateValues(SudokuSolverTechnique):
                         for sq in iter(sq_set):
                             if sq not in sqs:
                                 sq.eliminate(sqs[0])
-
-
-
 
 
 class SudokuSolver:
@@ -172,5 +168,3 @@ class SudokuSolver:
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
-
-
