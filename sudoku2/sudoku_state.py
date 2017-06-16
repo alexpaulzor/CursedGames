@@ -158,6 +158,8 @@ class SudokuState:
         return self.board.sets(self)
 
     def __eq__(self, other):
+        if not other:
+            return False
         for i, my_sq in enumerate(self.squares):
             if my_sq.bitmask != other.squares[i].bitmask:
                 return False

@@ -1,9 +1,10 @@
+import random
 
 from sudoku_state import set_N, N_2, SudokuSquare, StatePrinter, SudokuState, SudokuBoard
 
 
 class InvalidStateError(Exception):
-    def InvalidStateError(
+    def __init__(
             self, state=None, invalid_sets=None, invalid_squares=None):
         self.state = state
         self.invalid_sets = invalid_sets
@@ -11,24 +12,35 @@ class InvalidStateError(Exception):
 
 
 class DuplicateValueError(InvalidStateError):
-    def DuplicateValueError(self, constraint_set):
-        super(ImpossibleValueError, self).__init__(invalid_sets=[constraint_set])
+    def __init__(self, constraint_set):
+        super(DuplicateValueError, self).__init__(invalid_sets=[constraint_set])
 
 
 class ImpossibleValueError(InvalidStateError):
-    def ImpossibleValueError(self, square):
+    def __init__(self, square):
         super(ImpossibleValueError, self).__init__(invalid_squares=[square])
+
+
+class Winner(Exception):
+    pass
+    # def __init__(self):
+    #     super(Winner, self).__init__("You won! {}".format(state))
 
 
 class SudokuSolverTechnique:
     @classmethod
     def apply(cls, state):
         new_state = state.copy(transition_technique=cls)
-        cls.apply_to_sets(new_state.sets)
-        cls.apply_to_squares(new_state.squares)
-        if new_state == state:
+        new_state = cls.apply_to_state(new_state)
+        if not new_state or new_state == state:
             return state
         return new_state
+
+    @classmethod
+    def apply_to_state(cls, state):
+        cls.apply_to_sets(state.sets)
+        cls.apply_to_squares(state.squares)
+        return state
 
     @classmethod
     def apply_to_sets(cls, sets):
@@ -54,6 +66,24 @@ class ValidatorTechnique(SudokuSolverTechnique):
         for sq in squares:
             if sq.bitmask <= 0:
                 raise ImpossibleValueError(sq)
+
+
+class WinnerTechnique(SudokuSolverTechnique):
+    @classmethod
+    def apply(cls, state):
+        if cls.check_sets(state.sets):
+            return state
+        return None
+
+    @classmethod
+    def check_sets(cls, sets):
+        for sq_set in sets:
+            values = [sq.known_value for sq in sq_set]
+            known_values = [v for v in values if v]
+            # no duplicates
+            if len(set(known_values)) != N_2:
+                return False
+        return True
 
 
 class EliminateValues(SudokuSolverTechnique):
@@ -144,25 +174,73 @@ class EliminateValues(SudokuSolverTechnique):
                                 sq.eliminate(sqs[0])
 
 
-class SudokuSolver:
-    TECHNIQUES = [
-        ValidatorTechnique,
-        EliminateValues
-    ]
+class GuessAndCheck(SudokuSolverTechnique):
+    @classmethod
+    def apply_to_state(cls, state):
+        shuffled_sqs = list(state.squares)
+        random.shuffle(shuffled_sqs)
+        for sq in sorted(shuffled_sqs, key=lambda s: len(list(s.possible_values()))):
+            pvals = list(sq.possible_values())
+            if len(pvals) > 1:
+                random.shuffle(pvals)
+                for pval in pvals:
+                    finstate = cls.try_pval(state, sq, pval)
+                    if finstate:
+                        if WinnerTechnique.apply(finstate):
+                            return finstate
+                    else:
+                        print "Determined {!r} != {}".format(sq, pval)
+                        sq.eliminate(SudokuSquare(value=pval))
+                        print "(now {!r})".format(sq, pval)
+        return state
 
-    def __init__(self, initial_state):
+    @classmethod
+    def try_pval(cls, state, sq, value):
+        original_bitmask = sq.bitmask
+        try:
+            print "Trying {!r} = {}".format(sq, value)
+            sq.set_value(value)
+            solver = SudokuSolver(state)
+            final_state = solver.solve()
+            return final_state
+        except InvalidStateError:
+            return None
+        finally:
+            sq.set_bitmask(original_bitmask)
+            print "Reverted {!r}".format(sq)
+
+
+class SudokuSolver:
+    def __init__(self, initial_state, enable_guess_and_check=False):
         self._initial_state = initial_state
         self._current_state = initial_state
+        self._techniques = [
+            ValidatorTechnique,
+            EliminateValues
+        ]
+        if enable_guess_and_check:
+            self._techniques.append(GuessAndCheck)
+
+    def solve(self):
+        for state in self.solve_iter():
+            pass
+        return self._current_state
 
     def solve_iter(self):
-        for t in SudokuSolver.TECHNIQUES:
-            prev_state = None
-            while prev_state != self._current_state:
-                prev_state = self._current_state
-                self._current_state = t.apply(prev_state)
-                if self._current_state != prev_state:
-                    yield self._current_state
+        prev_state = None
+        while prev_state != self._current_state:
+            prev_state = self._current_state
+            self._current_state = self._solve_step()
+            yield self._current_state
         yield self._current_state
+
+    def _solve_step(self):
+        prev_state = self._current_state
+        for t in self._techniques:
+            self._current_state = t.apply(prev_state)
+            if self._current_state != prev_state:
+                return self._current_state
+        return self._current_state
 
 
 if __name__ == "__main__":

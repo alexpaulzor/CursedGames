@@ -18,13 +18,13 @@ print str(squares)
 state = SudokuState(squares=squares, board=board)
 StatePrinter.print_board_state(state, color=True)
 
-solver = SudokuSolver(state)
+solver = SudokuSolver(state, enable_guess_and_check=True)
 
 for newstate in solver.solve_iter():
     if newstate and newstate.parent:
         print "{} -> {} -> {}".format(
             newstate.parent._id, newstate.transition_technique, newstate._id)
-        StatePrinter.print_board_diff(newstate.parent, newstate)
+        StatePrinter.print_board_diff(newstate.parent, newstate, color=True)
     else:
         StatePrinter.print_board_state(newstate, color=True)
 
