@@ -531,6 +531,15 @@ class StatePrinter:
         return [colored(str(v), **cls.VALUE_TO_COLOR[str(v)]) for v in vals]
 
     @classmethod
+    def print_state_and_ancestor(cls, state):
+        if state and state.parent:
+            print "{} -> {} -> {}".format(
+                state.parent._id, state.transition_technique, state._id)
+            StatePrinter.print_board_diff(state.parent, state, color=True)
+        else:
+            StatePrinter.print_board_state(state, color=True)
+
+    @classmethod
     def print_playable_state(cls, state):
         """
             line is an N_4-character representation of the board where

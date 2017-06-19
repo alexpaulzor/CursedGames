@@ -199,9 +199,13 @@ class GuessAndCheck(SudokuSolverTechnique):
         original_bitmask = sq.bitmask
         try:
             print "Trying {!r} = {}".format(sq, value)
-            sq.set_value(value)
-            solver = SudokuSolver(state)
-            final_state = solver.solve()
+            new_state = state.copy()
+            new_state.squares[sq._id].set_value(value)
+            solver = SudokuSolver(new_state)
+            final_state = None
+            for final_state in solver.solve_iter():
+                print final_state.transition_technique
+                StatePrinter.print_state_and_ancestor(final_state)
             return final_state
         except InvalidStateError:
             return None
@@ -232,7 +236,6 @@ class SudokuSolver:
             prev_state = self._current_state
             self._current_state = self._solve_step()
             yield self._current_state
-        yield self._current_state
 
     def _solve_step(self):
         prev_state = self._current_state
@@ -240,7 +243,7 @@ class SudokuSolver:
             self._current_state = t.apply(prev_state)
             if self._current_state != prev_state:
                 return self._current_state
-        return self._current_state
+        return prev_state
 
 
 if __name__ == "__main__":
