@@ -4,15 +4,18 @@ from termcolor import colored
 global N, N_2, N_3, N_4
 
 
-def set_N(n=3):
+def set_N(n=2):
     global N, N_2, N_3, N_4
     N = n          # 2  # 3
     N_2 = N * N    # 4  # 9
     N_3 = N_2 * N  # 8  # 27
     N_4 = N_3 * N  # 16 # 81
 
-set_N()
-
+try:
+    if not N:
+        set_N(3)
+except:
+    set_N(2)
 
 class SudokuSquare:
     def __init__(self, value=None, bitmask=None, id=None, frozen=False):
@@ -196,8 +199,109 @@ class SudokuBoard:
 class SudokuBoardConstraint:
     @classmethod
     def groups_iter(cls, state):
-        """Return a list of sets of SudokuSquares"""
+        """Return a list of iterables of SudokuSquares"""
         return
+
+
+class XConstraint(SudokuBoardConstraint):
+    @classmethod
+    def groups_iter(cls, state):
+        """
+        >>> set_N(2)
+        >>> global N, N_2, N_3, N_4
+        >>> set_N(2)
+        >>> board = SudokuBoard()
+        >>> squares = [SudokuSquare(bitmask=i) for i in range(N_4)]
+        >>> state = SudokuState(squares=squares, board=board)
+        >>> StatePrinter.print_board_state(state)
+        #====+====#====+====#
+        #    | 1  #  2 | 12 #
+        #    |    #    |    #
+        #----+----#----+----#
+        #    | 1  #  2 | 12 #
+        # 3  | 3  # 3  | 3  #
+        #====+====#====+====#
+        #    | 1  #  2 | 12 #
+        #  4 |  4 #  4 |  4 #
+        #----+----#----+----#
+        #    | 1  #  2 |    #
+        # 34 | 34 # 34 |    #
+        #====+====#====+====#
+        >>> groups = list(XConstraint.groups_iter(state))
+        >>> [StatePrinter.print_square_set(g) for g in groups]
+        #====+====#====+====#
+        |    | 1  |  2 |    |
+        |    | 3  |  4 |    |
+        #====+====#====+====#
+        #====+====#====+====#
+        |    | 1  |  2 | 12 |
+        | 34 |  4 | 3  |    |
+        #====+====#====+====#
+        [None, None]
+        >>> set_N(2)
+        >>> global N, N_2, N_3, N_4
+        >>> N
+        2
+        >>> N_4
+        16
+        >>> range(0, N_4, N_2 + 1)
+        [0, 5, 10, 15]
+        >>> set_N(2)
+        >>> range((N_2 - 1) * N_2, N_2 - 2, 1 - N_2)
+        [12, 9, 6, 3]
+        """
+        yield [state.squares[i] for i in range(0, N_4, N_2 + 1)]
+
+        # 0 => 12
+        # 1 => 9
+        # 2 => 6
+        # 3 => 3
+        yield [state.squares[i] for i in
+               range((N_2 - 1) * N_2, N_2 - 2, 1 - N_2)]
+
+
+class MetaConstraint(SudokuBoardConstraint):
+    @classmethod
+    def groups_iter(cls, state):
+        """
+        >>> set_N(2)
+        >>> global N, N_2, N_3, N_4
+        >>> set_N(2)
+        >>> board = SudokuBoard()
+        >>> squares = [SudokuSquare(bitmask=i) for i in range(N_4)]
+        >>> state = SudokuState(squares=squares, board=board)
+        >>> StatePrinter.print_board_state(state)
+        #====+====#====+====#
+        #    | 1  #  2 | 12 #
+        #    |    #    |    #
+        #----+----#----+----#
+        #    | 1  #  2 | 12 #
+        # 3  | 3  # 3  | 3  #
+        #====+====#====+====#
+        #    | 1  #  2 | 12 #
+        #  4 |  4 #  4 |  4 #
+        #----+----#----+----#
+        #    | 1  #  2 |    #
+        # 34 | 34 # 34 |    #
+        #====+====#====+====#
+        >>> groups = list(MetaConstraint.groups_iter(state))
+        >>> [StatePrinter.print_square_set(g) for g in groups]
+        #====+====#====+====#
+        | 1  |  2 | 1  |  2 |
+        | 3  | 3  |  4 |  4 |
+        #====+====#====+====#
+        [None]
+        >>>
+        """
+        # N = 2 -> yield 1 set
+        # N = 3 -> yield 4 sets
+        if N == 2:
+            yield [state.squares[i] for i in [5, 6, 9, 10]]
+        elif N == 3:
+            yield [10, 11, 12, 19, 20, 21, 28, 29, 30]
+            yield [14, 15, 16, 23, 24, 25, 32, 33, 34]
+            yield [46, 47, 48, 55, 56, 57, 64, 65, 66]
+            yield [50, 51, 52, 59, 60, 61, 68, 69, 70]
 
 
 class RowConstraint(SudokuBoardConstraint):
@@ -206,39 +310,39 @@ class RowConstraint(SudokuBoardConstraint):
         """
         >>> set_N(2)
         >>> board = SudokuBoard()
-        >>> squares = [SudokuSquare(value=(i % N_2)) for i in range(N_4)]
+        >>> squares = [SudokuSquare(bitmask=i) for i in range(N_4)]
         >>> state = SudokuState(squares=squares, board=board)
         >>> StatePrinter.print_board_state(state)
         #====+====#====+====#
-        #    | 1  #  2 |    #
-        #    |    #    | 3  #
-        #----+----#----+----#
+        #    | 1  #  2 | 12 #
         #    |    #    |    #
-        #  4 |    #    |    #
+        #----+----#----+----#
+        #    | 1  #  2 | 12 #
+        # 3  | 3  # 3  | 3  #
         #====+====#====+====#
-        #    |    # 1  |  2 #
-        #    |    #    |    #
+        #    | 1  #  2 | 12 #
+        #  4 |  4 #  4 |  4 #
         #----+----#----+----#
-        #    |    #    |    #
-        # 3  |  4 #    |    #
+        #    | 1  #  2 |    #
+        # 34 | 34 # 34 |    #
         #====+====#====+====#
         >>> groups = list(RowConstraint.groups_iter(state))
         >>> [StatePrinter.print_square_set(g) for g in groups]
         #====+====#====+====#
+        |    | 1  |  2 | 12 |
+        |    |    |    |    |
+        #====+====#====+====#
+        #====+====#====+====#
+        |    | 1  |  2 | 12 |
+        | 3  | 3  | 3  | 3  |
+        #====+====#====+====#
+        #====+====#====+====#
+        |    | 1  |  2 | 12 |
+        |  4 |  4 |  4 |  4 |
+        #====+====#====+====#
+        #====+====#====+====#
         |    | 1  |  2 |    |
-        |    |    |    | 3  |
-        #====+====#====+====#
-        #====+====#====+====#
-        |    |    |    |    |
-        |  4 |    |    |    |
-        #====+====#====+====#
-        #====+====#====+====#
-        |    |    | 1  |  2 |
-        |    |    |    |    |
-        #====+====#====+====#
-        #====+====#====+====#
-        |    |    |    |    |
-        | 3  |  4 |    |    |
+        | 34 | 34 | 34 |    |
         #====+====#====+====#
         [None, None, None, None]
         """
@@ -254,39 +358,39 @@ class ColumnConstraint(SudokuBoardConstraint):
         """
         >>> set_N(2)
         >>> board = SudokuBoard()
-        >>> squares = [SudokuSquare(value=(i % N_2)) for i in range(N_4)]
+        >>> squares = [SudokuSquare(bitmask=i) for i in range(N_4)]
         >>> state = SudokuState(squares=squares, board=board)
         >>> StatePrinter.print_board_state(state)
         #====+====#====+====#
-        #    | 1  #  2 |    #
-        #    |    #    | 3  #
-        #----+----#----+----#
+        #    | 1  #  2 | 12 #
         #    |    #    |    #
-        #  4 |    #    |    #
+        #----+----#----+----#
+        #    | 1  #  2 | 12 #
+        # 3  | 3  # 3  | 3  #
         #====+====#====+====#
-        #    |    # 1  |  2 #
-        #    |    #    |    #
+        #    | 1  #  2 | 12 #
+        #  4 |  4 #  4 |  4 #
         #----+----#----+----#
-        #    |    #    |    #
-        # 3  |  4 #    |    #
+        #    | 1  #  2 |    #
+        # 34 | 34 # 34 |    #
         #====+====#====+====#
         >>> groups = list(ColumnConstraint.groups_iter(state))
         >>> [StatePrinter.print_square_set(g) for g in groups]
         #====+====#====+====#
         |    |    |    |    |
-        |    |  4 |    | 3  |
+        |    | 3  |  4 | 34 |
         #====+====#====+====#
         #====+====#====+====#
-        | 1  |    |    |    |
-        |    |    |    |  4 |
+        | 1  | 1  | 1  | 1  |
+        |    | 3  |  4 | 34 |
         #====+====#====+====#
         #====+====#====+====#
-        |  2 |    | 1  |    |
-        |    |    |    |    |
+        |  2 |  2 |  2 |  2 |
+        |    | 3  |  4 | 34 |
         #====+====#====+====#
         #====+====#====+====#
-        |    |    |  2 |    |
-        | 3  |    |    |    |
+        | 12 | 12 | 12 |    |
+        |    | 3  |  4 |    |
         #====+====#====+====#
         [None, None, None, None]
         """
@@ -300,39 +404,39 @@ class SectorConstraint(SudokuBoardConstraint):
         """
         >>> set_N(2)
         >>> board = SudokuBoard()
-        >>> squares = [SudokuSquare(value=(i % N_2)) for i in range(N_4)]
+        >>> squares = [SudokuSquare(bitmask=i) for i in range(N_4)]
         >>> state = SudokuState(squares=squares, board=board)
         >>> StatePrinter.print_board_state(state)
         #====+====#====+====#
-        #    | 1  #  2 |    #
-        #    |    #    | 3  #
-        #----+----#----+----#
+        #    | 1  #  2 | 12 #
         #    |    #    |    #
-        #  4 |    #    |    #
+        #----+----#----+----#
+        #    | 1  #  2 | 12 #
+        # 3  | 3  # 3  | 3  #
         #====+====#====+====#
-        #    |    # 1  |  2 #
-        #    |    #    |    #
+        #    | 1  #  2 | 12 #
+        #  4 |  4 #  4 |  4 #
         #----+----#----+----#
-        #    |    #    |    #
-        # 3  |  4 #    |    #
+        #    | 1  #  2 |    #
+        # 34 | 34 # 34 |    #
         #====+====#====+====#
         >>> groups = list(SectorConstraint.groups_iter(state))
         >>> [StatePrinter.print_square_set(g) for g in groups]
         #====+====#====+====#
-        |    | 1  |    |    |
-        |    |    |  4 |    |
+        |    | 1  |    | 1  |
+        |    |    | 3  | 3  |
         #====+====#====+====#
         #====+====#====+====#
-        |  2 |    |    |    |
-        |    | 3  |    |    |
+        |  2 | 12 |  2 | 12 |
+        |    |    | 3  | 3  |
         #====+====#====+====#
         #====+====#====+====#
-        |    |    |    |    |
-        |    |    | 3  |  4 |
+        |    | 1  |    | 1  |
+        |  4 |  4 | 34 | 34 |
         #====+====#====+====#
         #====+====#====+====#
-        | 1  |  2 |    |    |
-        |    |    |    |    |
+        |  2 | 12 |  2 |    |
+        |  4 |  4 | 34 |    |
         #====+====#====+====#
         [None, None, None, None]
         """
@@ -426,9 +530,9 @@ class StatePrinter:
         r"""
         >>> set_N(2)
         >>> board = SudokuBoard()
-        >>> squares = [SudokuSquare(value=(i % N_2)) for i in range(N_4)]
+        >>> squares = [SudokuSquare(bitmask=i) for i in range(N_4)]
         >>> list(StatePrinter._get_board_lines(SudokuState(squares=squares, board=board)))  # noqa
-        ['#    | 1  #  2 |    #\n#    |    #    | 3  #', '#    |    #    |    #\n#  4 |    #    |    #', '#    |    # 1  |  2 #\n#    |    #    |    #', '#    |    #    |    #\n# 3  |  4 #    |    #']
+        ['#    | 1  #  2 | 12 #\n#    |    #    |    #', '#    | 1  #  2 | 12 #\n# 3  | 3  # 3  | 3  #', '#    | 1  #  2 | 12 #\n#  4 |  4 #  4 |  4 #', '#    | 1  #  2 |    #\n# 34 | 34 # 34 |    #']
         """
         for y in range(N_2):
             for row in cls._get_row_lines(
@@ -457,7 +561,7 @@ class StatePrinter:
     @classmethod
     def _state_lines(cls, sq, color=False):
         """
-        >>> ','.join(list(StatePrinter.state_lines(SudokuSquare(value=1)))
+        >>> ','.join(list(StatePrinter._state_lines(SudokuSquare(value=1))))
         '1 ,  '
         >>> bm_1 = SudokuSquare.value_to_bitmask(1)
         >>> bm_2 = SudokuSquare.value_to_bitmask(2)
@@ -466,7 +570,7 @@ class StatePrinter:
         >>> square = SudokuSquare(bitmask=bm_1 | bm_2 | bm_3 | bm_4)
         >>> square
         sq#None 1234
-        >>> ','.join(StatePrinter.state_lines(square))
+        >>> ','.join(StatePrinter._state_lines(square))
         '  ,  '
         """
         if sq.bitmask == SudokuSquare.full_bitmask():
