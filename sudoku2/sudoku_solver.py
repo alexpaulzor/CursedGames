@@ -1,6 +1,6 @@
 import random
 
-from sudoku_state import set_N, N_2, SudokuSquare, StatePrinter, SudokuState, SudokuBoard
+from sudoku_state import set_N, N_2, N_4, SudokuSquare, StatePrinter, SudokuState, SudokuBoard
 
 
 class InvalidStateError(Exception):
@@ -175,11 +175,14 @@ class EliminateValues(SudokuSolverTechnique):
 
 
 class GuessAndCheck(SudokuSolverTechnique):
+    MAX_GUESSES = N_4 * N_2
+
     @classmethod
     def apply_to_state(cls, state):
         shuffled_sqs = list(state.squares)
         random.shuffle(shuffled_sqs)
-        for sq in sorted(shuffled_sqs, key=lambda s: len(list(s.possible_values()))):
+        for sq in sorted(
+                shuffled_sqs, key=lambda s: len(list(s.possible_values()))):
             pvals = list(sq.possible_values())
             if len(pvals) > 1:
                 random.shuffle(pvals)
@@ -215,14 +218,14 @@ class GuessAndCheck(SudokuSolverTechnique):
 
 
 class SudokuSolver:
-    def __init__(self, initial_state, enable_guess_and_check=False):
+    def __init__(self, initial_state, enable_guessing=False, ):
         self._initial_state = initial_state
         self._current_state = initial_state
         self._techniques = [
             ValidatorTechnique,
             EliminateValues
         ]
-        if enable_guess_and_check:
+        if enable_guessing:
             self._techniques.append(GuessAndCheck)
 
     def solve(self):
@@ -244,6 +247,77 @@ class SudokuSolver:
             if self._current_state != prev_state:
                 return self._current_state
         return prev_state
+
+
+class SudokuGenerator:
+
+    @classmethod
+    def solved_squares(cls, state):
+        return [sq for sq in state.squares if sq.known_value]
+
+    @classmethod
+    def generate_puzzle(cls):
+        solution = cls.generate_solved_puzzle()
+        print "Got solved puzzle!"
+        StatePrinter.print_board_state(solution, color=True)
+        puzzle = solution.copy()
+
+        while True:
+            StatePrinter.print_board_state(puzzle, color=True)
+            StatePrinter.print_playable_state(puzzle)
+            sq = random.choice(SudokuGenerator.solved_squares(puzzle))
+            print "Attempting to dissolve {}".format(sq)
+            sq_val = sq.known_value
+            alternate_solution = None
+            for i in range(1, N_2 + 1):
+                if i == sq_val:
+                    continue
+                alternate_state = puzzle.copy(transition_technique="test_alternate")
+                alternate_state.squares[sq.id].set_value(i)
+                solver = SudokuSolver(alternate_state, enable_guessing=True)
+                try:
+                    alternate_solution = solver.solve()
+                except InvalidStateError:
+                    continue
+                if alternate_solution and WinnerTechnique.apply(alternate_solution) and alternate_solution != solution:
+                    # uh oh
+                    break
+            if alternate_solution and WinnerTechnique.apply(alternate_solution) and alternate_solution != solution:
+                # this square is important, so keep it
+                print "Nope, we need {}".format(sq)
+            else:
+                # the puzzle is only solvable when sq == sq_val, so we don't
+                # need it
+                print "dissolving redundant square {}".format(sq)
+                puzzle = puzzle.copy(transition_technique="eliminate_redundant")
+                puzzle.squares[sq.id].set_value(None)
+
+
+    @classmethod
+    def generate_solved_puzzle(cls):
+        """
+
+        """
+        board = SudokuBoard()
+        state = SudokuState(board=board)
+
+        while not WinnerTechnique.apply(state):
+            StatePrinter.print_board_state(state, color=True)
+            sq = random.choice(state.squares)
+            if not sq.known_value:
+                for value in sq.possible_values():
+                    new_state = GuessAndCheck.try_pval(state, sq, value)
+                    if new_state:
+                        state = new_state
+                        break
+            solver = SudokuSolver(state, enable_guessing=False)
+            state = solver.solve()
+        return state
+
+
+
+
+
 
 
 if __name__ == "__main__":

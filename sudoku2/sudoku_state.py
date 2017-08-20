@@ -36,6 +36,10 @@ class SudokuSquare:
         self.frozen = frozen and self.known_value
 
     @property
+    def id(self):
+        return self._id
+
+    @property
     def bitmask(self):
         return int(self._value_bitmask)
 
@@ -69,10 +73,10 @@ class SudokuSquare:
 
     @property
     def known_value(self):
-        return SudokuSquare.bitmask_to_known_value(self.bitmask)
+        return self.bitmask_to_known_value(self.bitmask)
 
     def set_value(self, value):
-        if value > 0:
+        if value and value > 0:
             self._value_bitmask = SudokuSquare.value_to_bitmask(value)
         else:
             self._value_bitmask = self.full_bitmask()
@@ -144,6 +148,10 @@ class SudokuState:
             self._id = parent._id + 1
         elif board:
             self.board = board
+
+    @property
+    def id(self):
+        return self._id
 
     def copy(self, transition_technique=None):
         squares = [SudokuSquare(bitmask=sq.bitmask, id=sq._id)
@@ -665,8 +673,9 @@ class StatePrinter:
             r'^[xm]?[.1-9]{81}([.1-9]{81}(([0-9]{3}|.[1-9]g){81})?)?'
             are ignored, so whitespace/formatting does not matter.
         """
-        print ''.join([str(sq.known_value or '.') for sq in state.squares] * 2
-                      + ["{:03d}".format(sq.bitmask) for sq in state.squares])
+        print ''.join([str(sq.known_value or '.') for sq in state.squares])
+        # * 2
+        #              + ["{:03d}".format(sq.bitmask) for sq in state.squares])
 
 if __name__ == "__main__":
     import doctest
