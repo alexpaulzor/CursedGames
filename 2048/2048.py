@@ -23,11 +23,11 @@ class Cursed2048:
 
 
     def newgame(self, stdscr):
-        curses.init_pair(9, curses.COLOR_RED, curses.COLOR_BLUE)
-        curses.init_pair(10, curses.COLOR_BLUE, curses.COLOR_RED)
-        curses.init_pair(11, curses.COLOR_BLUE, curses.COLOR_RED)
-        curses.init_pair(12, curses.COLOR_BLUE, curses.COLOR_RED)
-        curses.init_pair(13, curses.COLOR_BLUE, curses.COLOR_RED)
+        curses.init_pair(9, curses.COLOR_GREEN, curses.COLOR_BLUE)
+        curses.init_pair(10, curses.COLOR_MAGENTA, curses.COLOR_BLUE)
+        curses.init_pair(11, curses.COLOR_RED, curses.COLOR_BLUE)
+        curses.init_pair(12, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+        curses.init_pair(13, curses.COLOR_WHITE, curses.COLOR_BLUE)
         curses.init_pair(14, curses.COLOR_WHITE, curses.COLOR_GREEN)
         curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
         curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
@@ -36,7 +36,7 @@ class Cursed2048:
         curses.init_pair(5, curses.COLOR_RED, curses.COLOR_BLACK)
         curses.init_pair(6, curses.COLOR_YELLOW, curses.COLOR_BLACK)
         curses.init_pair(7, curses.COLOR_WHITE, curses.COLOR_BLACK)
-        curses.init_pair(8, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        curses.init_pair(8, curses.COLOR_CYAN, curses.COLOR_BLUE)
         self.stdscr = stdscr
         self.stdscr.clear()
         self.printboard()
@@ -128,8 +128,8 @@ class Cursed2048:
             for x, sq in enumerate(row):
                 #print (x, sq)
                 color = sq  # 14 if (x, y) == self.new_sq else sq
-                self.stdscr.addstr(2 * y, 6 * x, '|{:^4}|'.format(2 ** sq if sq > 0 else ' '), curses.color_pair(color))
-                self.stdscr.addstr(2 * y + 1, 0, '+====+' * 4)
+                self.stdscr.addstr(1 + 2 * y, 6 * x, '|{:^4}|'.format(2 ** sq if sq > 0 else ' '), curses.color_pair(color))
+                self.stdscr.addstr(1 + 2 * y + 1, 0, '+====+' * 4)
         self.stdscr.refresh()
 
     def newboard(self):
