@@ -25,6 +25,10 @@ class Cursed2048:
     def newgame(self, stdscr):
         curses.init_pair(9, curses.COLOR_RED, curses.COLOR_BLUE)
         curses.init_pair(10, curses.COLOR_BLUE, curses.COLOR_RED)
+        curses.init_pair(11, curses.COLOR_BLUE, curses.COLOR_RED)
+        curses.init_pair(12, curses.COLOR_BLUE, curses.COLOR_RED)
+        curses.init_pair(13, curses.COLOR_BLUE, curses.COLOR_RED)
+        curses.init_pair(14, curses.COLOR_WHITE, curses.COLOR_GREEN)
         curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
         curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
         curses.init_pair(3, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
@@ -38,7 +42,9 @@ class Cursed2048:
         self.printboard()
         key = None
         prev_board = self.board
+
         while (key != 'q'):
+            self.new_sq = None
             start_board = self.board
             try:
                 key = self.stdscr.getkey()
@@ -71,6 +77,7 @@ class Cursed2048:
                     y = random.randint(0, 3)
                     if self.board[y][x] == 0:
                         self.board[y][x] = 2 if random.random() < RATE_OF_4 else 1
+                        self.new_sq = (x, y)
                         break
             self.printboard()
 
@@ -80,23 +87,24 @@ class Cursed2048:
         out = []
         for y in range(4):
             row = board[y][:]
-            for x in range(4):
-                sq = row[x]
-                if sq == 0:
-                    self._clear_zeros(row, x)
-                elif x > 0 and row[x - 1] == sq:
-                    row[x - 1] += 1
-                    row[x] = 0
-                    self._clear_zeros(row, x)
+            row = self._collapse_sq(row)
+
+            for i in range(4 - len(row)):
+                row.append(0)
 
             out.append(row)
         return out
 
-    def _clear_zeros(self, row, x):
-        while x < len(row) and row[x] == 0:
-            del row[x]
-        for i in range(4 - len(row)):
-            row.append(0)
+    def _collapse_sq(self, row, x=0):
+        row = [sq for sq in row if sq > 0]
+        if x >= len(row):
+            return row
+        if row[x] > 0 and x < len(row) - 1 and row[x + 1] == row[x]:
+            row[x] += 1
+            row[x + 1] = 0
+        row = self._collapse_sq(row, x + 1)
+
+        return row
 
     def haslost(self):
         for row in self.board:
@@ -119,7 +127,8 @@ class Cursed2048:
             #print (y, row)
             for x, sq in enumerate(row):
                 #print (x, sq)
-                self.stdscr.addstr(2 * y, 6 * x, '|{:^4}|'.format(2 ** sq if sq > 0 else ' '), curses.color_pair(sq))
+                color = sq  # 14 if (x, y) == self.new_sq else sq
+                self.stdscr.addstr(2 * y, 6 * x, '|{:^4}|'.format(2 ** sq if sq > 0 else ' '), curses.color_pair(color))
                 self.stdscr.addstr(2 * y + 1, 0, '+====+' * 4)
         self.stdscr.refresh()
 
@@ -132,6 +141,7 @@ class Cursed2048:
             y = random.randint(0, 3)
             #print (x, y, 1)
             self.board[y][x] = 1
+            self.new_sq = (x, y)
         #print self.board
 
 
