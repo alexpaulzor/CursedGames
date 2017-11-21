@@ -3,24 +3,22 @@
 import curses
 import time
 import random
-import sys
 
 RATE_OF_4 = 1.0 / 10
+N = 5
+
 
 class Cursed2048:
 
     board = {}
     stdscr = None
     retval = None
-    COLORS = { '1' : 1, '2' : 2, '3' : 3, '4' : 4, '5' : 5, '6' : 6, '7' : 7, '8' : 8, 'M' : 9, 'F' : 10 }
 
     def __init__(self):
         self.newboard()
         curses.wrapper(self.newgame)
         self.printboard()
         print self.retval
-
-
 
     def newgame(self, stdscr):
         curses.init_pair(9, curses.COLOR_GREEN, curses.COLOR_BLUE)
@@ -48,19 +46,27 @@ class Cursed2048:
             start_board = self.board
             try:
                 key = self.stdscr.getkey()
-            except:
+            except Exception:
                 pass
             if (key == 'KEY_LEFT' or key == 'h'):
                 self.board = self.collapse_left(self.board)
             elif (key == 'KEY_RIGHT' or key == 'l'):
-                self.board = [outrow[::-1] for outrow in self.collapse_left([row[::-1] for row in self.board])]
+                self.board = [
+                    outrow[::-1]
+                    for outrow in
+                    self.collapse_left(
+                        [row[::-1] for row in self.board])]
             elif (key == 'KEY_UP' or key == 'k'):
                 trans_board = [list(col) for col in zip(*self.board)]
                 trans_board = self.collapse_left(trans_board)
                 self.board = [list(row) for row in zip(*trans_board)]
             elif (key == 'KEY_DOWN' or key == 'j'):
                 trans_board = [list(col) for col in zip(*self.board)]
-                trans_board = [outrow[::-1] for outrow in self.collapse_left([row[::-1] for row in trans_board])]
+                trans_board = [
+                    outrow[::-1]
+                    for outrow in
+                    self.collapse_left(
+                        [row[::-1] for row in trans_board])]
                 self.board = [list(row) for row in zip(*trans_board)]
             elif key == 'u':
                 self.board = prev_board
@@ -73,10 +79,13 @@ class Cursed2048:
             if start_board != self.board:
                 prev_board = start_board
                 while key != 'u':
-                    x = random.randint(0, 3)
-                    y = random.randint(0, 3)
+                    x = random.randint(0, N - 1)
+                    y = random.randint(0, N - 1)
                     if self.board[y][x] == 0:
-                        self.board[y][x] = 2 if random.random() < RATE_OF_4 else 1
+                        self.board[y][x] = (
+                            2
+                            if random.random() < RATE_OF_4
+                            else 1)
                         self.new_sq = (x, y)
                         break
             self.printboard()
@@ -85,11 +94,11 @@ class Cursed2048:
 
     def collapse_left(self, board):
         out = []
-        for y in range(4):
+        for y in range(N):
             row = board[y][:]
             row = self._collapse_sq(row)
 
-            for i in range(4 - len(row)):
+            for i in range(N - len(row)):
                 row.append(0)
 
             out.append(row)
@@ -122,27 +131,32 @@ class Cursed2048:
         return False
 
     def printboard(self, board=None):
-        self.stdscr.addstr(0, 0, '+====+' * 4)
+        linesep = ('+' + ('=' * N) + '+') * N
+        self.stdscr.addstr(0, 0, linesep)
         for y, row in enumerate(board or self.board):
-            #print (y, row)
             for x, sq in enumerate(row):
-                #print (x, sq)
-                color = sq  # 14 if (x, y) == self.new_sq else sq
-                self.stdscr.addstr(1 + 2 * y, 6 * x, '|{:^4}|'.format(2 ** sq if sq > 0 else ' '), curses.color_pair(color))
-                self.stdscr.addstr(1 + 2 * y + 1, 0, '+====+' * 4)
+                color = sq
+                self.stdscr.addstr(
+                    1 + 2 * y,
+                    (N + 2) * x,
+                    ('|{:^' + str(N) + '}|').format(
+                        2 ** sq if sq > 0 else ' '), curses.color_pair(color))
+                self.stdscr.addstr(
+                    1 + 2 * y + 1,
+                    0,
+                    linesep)
         self.stdscr.refresh()
 
     def newboard(self):
-        self.board = [[0] * 4] + [[0] * 4] + [[0] * 4] + [[0] * 4]
-        #print self.board
+        self.board = []
+        for i in range(N):
+            self.board.append([0] * N)
 
         for i in range(2):
-            x = random.randint(0, 3)
-            y = random.randint(0, 3)
-            #print (x, y, 1)
+            x = random.randint(0, N - 1)
+            y = random.randint(0, N - 1)
             self.board[y][x] = 1
             self.new_sq = (x, y)
-        #print self.board
 
 
 if __name__ == '__main__':
