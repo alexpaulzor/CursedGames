@@ -8,6 +8,10 @@ import time
 from sudokuboard import SudokuBoardSolver, SudokuBoardGenerator, N, N_2, N_4, UnsolvableError
 from display import SudokuDisplay
 import threading
+from sudoku2.sudoku_state import set_N
+set_N(N)
+from sudoku2.sudoku_solver import SudokuGenerator
+
 
 
 @click.group()
@@ -43,8 +47,10 @@ def play(puzzle, x_regions, meta_regions, verbose, generate):
                 len(list(s.board.unsolved_squares())))
         print "({} clues, {} steps)".format(s.board.clues, s.steps)
 
+
 def log(msg, replace=False):
     print msg
+
 
 @cli.command()
 @click.option('-x', '--x-regions', is_flag=True)
@@ -53,20 +59,21 @@ def log(msg, replace=False):
 def generate(x_regions, meta_regions, verbose):
     _generate(x_regions, meta_regions, verbose)
 
+
 def _generate(x_regions, meta_regions, verbose):
-    board = SudokuBoardGenerator(x_regions, meta_regions)
-    last_status_clock = time.clock()
-    for msg in board.generate_iter(verbose=verbose):
-        if verbose or 'gen' in msg or time.clock() - last_status_clock > 1:
-            last_status_clock = time.clock()
-            for lmsg in board._log:
-                print lmsg
-            board._log = []
-            print msg
-    result = board.current_state(givens_only=True)
+    result = SudokuGenerator.generate_puzzle()
+    # board = SudokuBoardGenerator(x_regions, meta_regions)
+    # last_status_clock = time.clock()
+    # for msg in board.generate_iter(verbose=verbose):
+    #     if verbose or 'gen' in msg or time.clock() - last_status_clock > 1:
+    #         last_status_clock = time.clock()
+    #         for lmsg in board._log:
+    #             print lmsg
+    #         board._log = []
+    #         print msg
+    # result = board.current_state(givens_only=True)
     print "Generated: " + result
     return result
-
 
 
 @cli.command()
@@ -79,6 +86,7 @@ def solve(puzzle, x_regions, meta_regions, verbose):
     if puzzle:
         board.load_game(str(puzzle))
     console_solve(board, verbose=verbose)
+
 
 @cli.command()
 @click.argument('puzzle', type=str, required=False)

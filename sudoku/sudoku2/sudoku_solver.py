@@ -263,44 +263,49 @@ class SudokuGenerator:
         print "Got solved puzzle!"
         StatePrinter.print_board_state(solution, color=True)
         puzzle = solution.copy()
-        required_squares = set()
 
-        while set(SudokuGenerator.solved_squares(puzzle)) > required_squares:
-            StatePrinter.print_board_state(puzzle, color=True)
-            StatePrinter.print_playable_state(puzzle)
-            sq = random.choice(SudokuGenerator.solved_squares(puzzle))
-            print "Attempting to dissolve {}".format(sq)
-            sq_val = sq.known_value
-            alternate_solution = None
-            for i in range(1, N_2 + 1):
-                if i == sq_val:
-                    continue
-                alternate_state = puzzle.copy(
-                    transition_technique="test_alternate")
-                alternate_state.squares[sq.id].set_value(i)
-                solver = SudokuSolver(alternate_state, enable_guessing=True)
-                try:
-                    alternate_solution = solver.solve()
-                except InvalidStateError:
-                    continue
+        try:
+            required_squares = set()
+            while set(SudokuGenerator.solved_squares(puzzle)) > required_squares:
+                StatePrinter.print_board_state(puzzle, color=True)
+                StatePrinter.print_playable_state(puzzle)
+                sq = random.choice(SudokuGenerator.solved_squares(puzzle))
+                print "Attempting to dissolve {}".format(sq)
+                sq_val = sq.known_value
+                alternate_solution = None
+                for i in range(1, N_2 + 1):
+                    if i == sq_val:
+                        continue
+                    alternate_state = puzzle.copy(
+                        transition_technique="test_alternate")
+                    alternate_state.squares[sq.id].set_value(i)
+                    solver = SudokuSolver(alternate_state, enable_guessing=True)
+                    try:
+                        alternate_solution = solver.solve()
+                    except InvalidStateError:
+                        continue
+                    if (alternate_solution
+                            and WinnerTechnique.apply(alternate_solution)
+                            and alternate_solution != solution):
+                        # uh oh
+                        break
                 if (alternate_solution
                         and WinnerTechnique.apply(alternate_solution)
                         and alternate_solution != solution):
-                    # uh oh
-                    break
-            if (alternate_solution
-                    and WinnerTechnique.apply(alternate_solution)
-                    and alternate_solution != solution):
-                # this square is important, so keep it
-                print "Nope, we need {}".format(sq)
-                required_squares.add(sq)
-            else:
-                # the puzzle is only solvable when sq == sq_val, so we don't
-                # need it
-                print "dissolving redundant square {}".format(sq)
-                puzzle = puzzle.copy(
-                    transition_technique="eliminate_redundant")
-                puzzle.squares[sq.id].set_value(None)
+                    # this square is important, so keep it
+                    print "Nope, we need {}".format(sq)
+                    required_squares.add(sq)
+                else:
+                    # the puzzle is only solvable when sq == sq_val, so we don't
+                    # need it
+                    print "dissolving redundant square {}".format(sq)
+                    puzzle = puzzle.copy(
+                        transition_technique="eliminate_redundant")
+                    puzzle.squares[sq.id].set_value(None)
+                    required_squares = set()
+        except KeyboardInterrupt as e:
+            print "Error: {}".format(e)
+            return StatePrinter.get_playable_state(puzzle)
 
         return StatePrinter.get_playable_state(puzzle)
 
