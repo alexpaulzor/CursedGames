@@ -11,11 +11,13 @@ def set_N(n=2):
     N_3 = N_2 * N  # 8  # 27
     N_4 = N_3 * N  # 16 # 81
 
+
 try:
     if not N:
         set_N(3)
-except:
+except Exception:
     set_N(2)
+
 
 class SudokuSquare:
     def __init__(self, value=None, bitmask=None, id=None, frozen=False):
@@ -676,6 +678,7 @@ class StatePrinter:
         print ''.join([str(sq.known_value or '.') for sq in state.squares])
         # * 2
         #              + ["{:03d}".format(sq.bitmask) for sq in state.squares])
+
 
 if __name__ == "__main__":
     import doctest
