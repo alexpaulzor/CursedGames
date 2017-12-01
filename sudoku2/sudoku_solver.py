@@ -263,8 +263,9 @@ class SudokuGenerator:
         print "Got solved puzzle!"
         StatePrinter.print_board_state(solution, color=True)
         puzzle = solution.copy()
+        required_squares = set()
 
-        while True:
+        while set(SudokuGenerator.solved_squares(puzzle)) > required_squares:
             StatePrinter.print_board_state(puzzle, color=True)
             StatePrinter.print_playable_state(puzzle)
             sq = random.choice(SudokuGenerator.solved_squares(puzzle))
@@ -292,6 +293,7 @@ class SudokuGenerator:
                     and alternate_solution != solution):
                 # this square is important, so keep it
                 print "Nope, we need {}".format(sq)
+                required_squares.add(sq)
             else:
                 # the puzzle is only solvable when sq == sq_val, so we don't
                 # need it
@@ -299,6 +301,8 @@ class SudokuGenerator:
                 puzzle = puzzle.copy(
                     transition_technique="eliminate_redundant")
                 puzzle.squares[sq.id].set_value(None)
+
+        return StatePrinter.get_playable_state(puzzle)
 
     @classmethod
     def generate_solved_puzzle(cls):

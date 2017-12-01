@@ -655,6 +655,10 @@ class StatePrinter:
 
     @classmethod
     def print_playable_state(cls, state):
+        print cls.get_playable_state(state)
+
+    @classmethod
+    def get_playable_state(cls, state):
         """
             line is an N_4-character representation of the board where
             given values are 1-9 and spaces are .
@@ -675,7 +679,7 @@ class StatePrinter:
             r'^[xm]?[.1-9]{81}([.1-9]{81}(([0-9]{3}|.[1-9]g){81})?)?'
             are ignored, so whitespace/formatting does not matter.
         """
-        print ''.join([str(sq.known_value or '.') for sq in state.squares])
+        return ''.join([str(sq.known_value or '.') for sq in state.squares])
         # * 2
         #              + ["{:03d}".format(sq.bitmask) for sq in state.squares])
 
