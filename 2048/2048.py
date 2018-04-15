@@ -72,7 +72,7 @@ class Cursed2048:
         self.stdscr.clear()
         self.printboard()
         key = None
-        prev_board = self.board
+        prev_board = [self.board]
 
         while (key != 'q'):
             self.new_sq = None
@@ -102,12 +102,12 @@ class Cursed2048:
                         [row[::-1] for row in trans_board])]
                 self.board = [list(row) for row in zip(*trans_board)]
             elif key == 'u':
-                self.board = prev_board
-            if self.check_gameover():
-                return
+                if any(prev_board):
+                    self.board = prev_board.pop()
+                    start_board = self.board
 
             if start_board != self.board:
-                prev_board = start_board
+                prev_board.append(start_board)
                 while key != 'u':
                     x = random.randint(0, self.N - 1)
                     y = random.randint(0, self.N - 1)
@@ -118,7 +118,7 @@ class Cursed2048:
                             else 1)
                         self.new_sq = (x, y)
                         break
-            self.printboard()
+            self.printboard(msg=str(len(prev_board)))
 
         self.retval = self.retval or "Goodbye"
 
@@ -172,9 +172,10 @@ class Cursed2048:
                     return True
         return False
 
-    def printboard(self, board=None):
+    def printboard(self, board=None, msg=""):
         linesep = ('+' + ('=' * self.N) + '+') * self.N
         self.stdscr.addstr(0, 0, linesep)
+        self.stdscr.addstr(0, len(linesep) + 2, str(msg))
         for y, row in enumerate(board or self.board):
             for x, sq in enumerate(row):
                 color = sq
