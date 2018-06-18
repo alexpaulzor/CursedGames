@@ -11,12 +11,24 @@ class Maze:
     def __init__(self, width, height):
         self.width = width
         self.height = height
-        self.solution = []
+
+        self.steps = 0
         self.newboard(width, height)
         curses.wrapper(self.newgame)
         print self.retval
+        solution_size = 0
+        explored_squares = 0
+        for row in self.board.values():
+            for sq in row.values():
+                if sq.in_solution:
+                    solution_size += 1
+                if sq.in_solution is not None:
+                    explored_squares += 1
+        print "solution {} squares. {} / {} squares visited, {} steps".format(
+            solution_size, explored_squares, width * height, self.steps)
 
     def visit_neighbors(self, square):
+        self.steps += 1
         square.visible = True
         if square.x > 0:
             left_neighbor = self.board[square.y][square.x]
@@ -60,6 +72,7 @@ class Maze:
         key = None
         while (key != 'q'):
             key = self.stdscr.getkey()
+            prev_square = self.current_square
             if (key == 'KEY_LEFT' or key == 'h') and self.current_square.x > 0:
                 neighbor = self.board[self.current_square.y][self.current_square.x - 1]
                 if not neighbor.right_wall:
@@ -83,6 +96,11 @@ class Maze:
             if self.haswon():
                 self.retval = "You win!"
                 return
+            if self.current_square != prev_square:
+                if self.current_square.in_solution:
+                    prev_square.in_solution = False
+                else:
+                    prev_square.in_solution = True
             self.printboard()
             self.stdscr.refresh()
         self.retval = "Goodbye"
@@ -224,6 +242,12 @@ class Maze:
 
         self.current_square = self.enter_square
         self.current_square.visited = True
+
+        if rand.randint(0, 1) == 0:
+            direction = [0, 1]
+        else:
+            direction = [1, 0]
+        self.explore_neighbors(self.enter_square, direction)
 
     def explore_neighbors(self, square, direction):
         """
