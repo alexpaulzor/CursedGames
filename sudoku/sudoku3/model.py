@@ -107,6 +107,7 @@ class Square(object):
 
 
 class Group(object):
+    """A Group is a set of N_2 Squares."""
     def __init__(self, squares=None, name=None):
         self.name = name
         self.squares = squares
@@ -125,6 +126,8 @@ class Group(object):
 
 
 class Grid(object):
+    """Grid represents a list of Squares, and a set of Groups that constrain
+    their Values."""
     def __init__(self):
         self.squares = [
             Square(col, row)
