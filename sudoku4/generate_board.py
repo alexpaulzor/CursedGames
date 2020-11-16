@@ -26,6 +26,10 @@ class InvalidBoardException(RuntimeError):
     pass
 
 
+class TooManyAttemptsError(RuntimeError):
+    pass
+
+
 class Square:
     def __init__(self, row_i, column_i, value=None, region=None):
         self.row_i = row_i
@@ -63,11 +67,15 @@ class SquareGroup:
         self.values = values
 
     def is_solved(self):
-        return set(self.values.values()) == self.squares
+        self.validate()
+        vals = set(self.values.values())
+        vals.discard(None)
+        return len(vals) == len(self.squares)
 
-    def is_valid(self):
+    def validate(self):
         known_squares = [sq.value for sq in self.squares if sq.value]
-        return len(set(known_squares)) == len(known_squares)
+        if len(set(known_squares)) != len(known_squares):
+            raise InvalidBoardException(f"{self} has duplicate values")
 
     def unknown_values(self):
         for v, sq in self.values.items():
@@ -124,13 +132,17 @@ class Board:
                 self.regions.add(r)
 
     def add_rows_and_cols(self):
+        self.rows = []
+        self.cols = []
         for i in range(N_2):
-            r = RowGroup()
+            r = RowGroup(i)
             r.set_squares(self.grid[i])
             self.regions.add(r)
-            c = ColumnGroup()
+            self.rows.append(r)
+            c = ColumnGroup(i)
             c.set_squares([self.grid[j][i] for j in range(N_2)])
-            self.regions.add(r)
+            self.regions.add(c)
+            self.cols.append(c)
 
     def print(self):
         """
@@ -155,7 +167,7 @@ class Board:
             b3 = '...'  if r1 == r3
                = '===' otherwise
             c3 = '#'
-            a = '.' if all of 1, 2, 3, and 4 are in the same region
+            a = ' ' if all of 1, 2, 3, and 4 are in the same region
               = '=' if r1 == r2 and r3 == r but r1 != r
               = '|' if r1 == r3 and r2 == r but r1 != r
               = '#' otherwise
@@ -166,6 +178,8 @@ class Board:
             d = ' v ' if square has value v
               = '   ' otherwise
         """
+        hsep = ' - '
+        hdiv = '==='
         prev_row = None
         for row_i, row in enumerate(self.grid):
             above_line = ''
@@ -173,7 +187,7 @@ class Board:
             prev_sq = None
             for col_i, sq in enumerate(row):
                 a = '#'
-                b = '==='
+                b = hdiv
                 c = '#'
                 sq1 = sq2 = sq3 = None
                 if prev_row:
@@ -186,30 +200,39 @@ class Board:
                     if prev_sq:
                         sq3 = prev_sq
 
-                if sq2:
-                    if sq.region == sq2.region:
-                        b = '...'
-                        if sq3:
-                            if sq.region == sq3.region:
-                                c = ':'
-                                if sq1 and sq.region == sq1.region:
-                                    a = ' '
-                else:
-                    a = '='
+                if sq2 and sq.region == sq2.region:
+                    b = hsep
                 if sq3 and sq.region == sq3.region:
                     c = ':'
-                # if prev_sq.region == sq.region:
-                #     a = '='
-                #     c = ':'
-                # if sq.region == sq2.region:
-                #     b = '...'
-                # if sq.region == sq3.region:
-                #     c = ':'
-                #     if sq.region == sq2.region:
-                #         if sq.region == sq1.region:
-                #             a = ' '
-                #         else:
-                #             a = '='
+
+                if sq1:
+                    # not first row, not first column
+                    if sq.region != sq1.region:
+                        # either split horiz, vert, T, or X
+                        if sq.region == sq3.region:
+                            c = ':'
+                            if sq1.region == sq2.region:
+                                # split horiz
+                                a = '='
+                        elif sq.region == sq2.region:
+                            c = '#'
+                            if sq1.region == sq3.region:
+                                # split vert
+                                a = '#'
+                    elif sq.region == sq2.region == sq3.region:
+                        a = '+'
+                elif sq2:
+                    # First column, not first row
+                    if sq.region == sq2.region:
+                        b = hsep
+                        a = '#'
+                elif sq3:
+                    # First row, not first column
+                    if sq.region == sq3.region:
+                        a = '='
+                else:
+                    # Top corner
+                    a = ' '
 
                 if sq.value:
                     d = f' {sq.value} '
@@ -221,16 +244,19 @@ class Board:
                 above_line += a + b
                 line += c + d
                 prev_sq = sq
-            print(above_line + '#')
+            print(above_line + ('#' if prev_row else ' '))
             print(line + '#')
             prev_row = row
-        print(' ' + '====' * N_2)
+        print(' ' + '====' * (N_2 - 1) + '===')
 
-    def is_valid(self):
+    def validate(self):
         for r in self.regions:
-            if not r.is_valid():
-                return False
-        return True
+            r.validate()
+
+    def refresh(self):
+        for r in self.regions:
+            r.refresh_values()
+        self.validate()
 
     def is_solved(self):
         for r in self.regions:
@@ -238,11 +264,35 @@ class Board:
                 return False
         return True
 
-    def unset_squares(self):
+    def unsolved_squares(self):
+        """
+        Generator of squares that need to have their value set.
+        Prioiritize squares in regions with most values known.
+        """
+        visited_squares = set()
+        for reg in sorted(
+                self.regions, key=lambda r: len(list(r.unknown_values()))):
+            for sq in reg.squares:
+                if not sq.value and sq not in visited_squares:
+                    visited_squares.add(sq)
+                    yield sq
+
+    def solved_squares(self):
+        for sq in self.all_squares():
+            if sq.value:
+                yield sq
+
+    def all_squares(self):
         for row in self.grid:
             for sq in row:
-                if not sq.value:
-                    yield sq
+                yield sq
+
+    def values(self):
+        return list([sq.value for sq in self.all_squares()])
+
+    def set_values(self, values):
+        for i, sq in enumerate(self.all_squares()):
+            sq.value = values[i]
 
 
 class SquiggleBoard(Board):
@@ -261,7 +311,7 @@ class SquiggleBoard(Board):
         # self.fill_regions(corners)
         # self.fill_regions(cardinals)
         self.fill_regions(regions)
-        self.regions = set(regions)
+        self.regions |= set(regions)
 
     def generate_corner_regions(self):
         NW = SquiggleRegion('NW')
@@ -302,18 +352,22 @@ class SquiggleBoard(Board):
             # self.print()
             if not changed:
                 # Impossible, we broke it
-                raise InvalidBoardException()
+                raise InvalidBoardException("No changes")
 
     def generate_cardinal_regions(self):
         W = SquiggleRegion(' W')
         E = SquiggleRegion(' E')
         w_sq, e_sq = self._get_unvisited_square_pair(max_col=N_2 // 2 - 1)
+        # w_sq = self.grid[N_2 // 2][0]
+        # e_sq = self.grid[N_2 // 2][N_2 - 1]
         W.add_square(w_sq)
         E.add_square(e_sq)
 
         N = SquiggleRegion(' N')
         S = SquiggleRegion(' S')
         n_sq, s_sq = self._get_unvisited_square_pair(max_row=N_2 // 2 - 1)
+        # n_sq = self.grid[0][N_2 // 2]
+        # s_sq = self.grid[N_2 - 1][N_2 // 2]
         N.add_square(n_sq)
         S.add_square(s_sq)
 
@@ -380,11 +434,91 @@ class SquiggleBoard(Board):
 
     @classmethod
     def generate_valid_board(cls):
+        fails = 0
         while True:
             try:
                 return cls()
             except InvalidBoardException:
+                fails += 1
+                log.exception(f"Board generation failed {fails} times")
+
+
+MAX_ATTEMPTS = 10000
+STATUS_ATTEMPTS = 5000
+solve_attempts = 0
+
+
+def solve(board, respect_limits=True):
+    board.refresh()
+    if board.is_solved():
+        return board
+    global solve_attempts
+    solve_attempts += 1
+    squares_to_solve = list(board.unsolved_squares())
+    if solve_attempts % STATUS_ATTEMPTS == 0:
+        log.debug(
+            f"{solve_attempts} attempts and counting... "
+            f"({len(squares_to_solve)} unsolved)")
+        board.print()
+
+    if respect_limits and solve_attempts > MAX_ATTEMPTS:
+        raise TooManyAttemptsError()
+
+    # random.shuffle(squares_to_solve)
+    for sq in squares_to_solve:
+        # sq = None
+        # while not sq or sq.value:
+        #     sq = random.choice(squares_to_solve)
+        if sq.value:
+            continue
+        possible_vals = list(sq.region.unknown_values())
+        random.shuffle(possible_vals)
+        for v in possible_vals:
+            sq.value = v
+            try:
+                solution = solve(board, respect_limits=respect_limits)
+                return solution
+            except InvalidBoardException:
+                # board.print()
+                # log.exception(f"Found conflict with {sq}")
                 pass
+
+        sq.value = None
+        # board.print()
+        raise InvalidBoardException(
+            f"Could not solve for any value of {sq} out of {possible_vals}")
+
+
+def generate_puzzle(solution):
+    """
+    For all squares in solution (random order):
+    Try setting every value _except_ its actual value and solving.
+        * If any other values are solveable, that square must remain at its
+          original value
+    """
+    solved_squares = list(solution.solved_squares())
+    random.shuffle(solved_squares)
+    for sq in solved_squares:
+        orig_val = sq.value
+        orig_solution = solution.values()
+        alt_solution = None
+        for v in range(1, N_2 + 1):
+            if v == orig_val:
+                continue
+            sq.value = v
+            try:
+                alt_solution = solve(solution, respect_limits=False)
+                break
+            except InvalidBoardException:
+                pass
+        solution.set_values(orig_solution)
+        if alt_solution:
+            sq.value = orig_val
+            log.info(f"{sq} must remain as is")
+        else:
+            sq.value = None
+            log.info(f"{sq} can only be {orig_val}")
+    return solution
 
 
 def _mirror_coords(row_in, col_in):
@@ -394,15 +528,38 @@ def _mirror_coords(row_in, col_in):
     return row_i, col_i
 
 
-def solve(board):
-    if board.is_solved():
-        return True
-    # unset_squares = board.unset_squares()
-
-
 def main():
-    b = generate_board()
-    b.print()
+    solution = generate_solution()
+    puzzle = generate_puzzle(solution)
+    known = len(list(puzzle.solved_squares()))
+    unknown = len(list(puzzle.unsolved_squares()))
+    log.info(f"Computed ideal puzzle ({known} known / {unknown} unknown)")
+    puzzle.print()
+
+
+def generate_solution():
+    global solve_attempts
+    board_attempt = 0
+    solution = None
+    while not solution:
+        board_attempt += 1
+        log.info(f"Beginning board {board_attempt}")
+        solve_attempts = 0
+        b = generate_board()
+        log.info(f"Generated board {board_attempt}")
+        b.print()
+        try:
+            solution = solve(b)
+            log.info(
+                f"Found solution to board {board_attempt} "
+                f"after {solve_attempts} to solve()")
+            solution.print()
+            return solution
+        except (InvalidBoardException, TooManyAttemptsError):
+            log.exception(
+                f"Attempt {board_attempt} failed "
+                f"after {solve_attempts} to solve()")
+            b.print()
 
 
 def generate_board(squiggles=True):
