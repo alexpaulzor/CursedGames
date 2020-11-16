@@ -22,6 +22,12 @@ N = 3
 N_2 = 9
 
 
+FAST_ATTEMPTS = 10000
+MAX_ATTEMPTS = 100000
+STATUS_ATTEMPTS = 5000
+solve_attempts = 0
+
+
 class InvalidBoardException(RuntimeError):
     pass
 
@@ -443,11 +449,6 @@ class SquiggleBoard(Board):
                 log.exception(f"Board generation failed {fails} times")
 
 
-MAX_ATTEMPTS = 10000
-STATUS_ATTEMPTS = 5000
-solve_attempts = 0
-
-
 def solve(board, respect_limits=True):
     board.refresh()
     if board.is_solved():
@@ -461,7 +462,7 @@ def solve(board, respect_limits=True):
             f"({len(squares_to_solve)} unsolved)")
         board.print()
 
-    if respect_limits and solve_attempts > MAX_ATTEMPTS:
+    if respect_limits and solve_attempts > FAST_ATTEMPTS or solve_attempts > MAX_ATTEMPTS:
         raise TooManyAttemptsError()
 
     # random.shuffle(squares_to_solve)
@@ -496,9 +497,12 @@ def generate_puzzle(solution):
         * If any other values are solveable, that square must remain at its
           original value
     """
+    global solve_attempts
     solved_squares = list(solution.solved_squares())
     random.shuffle(solved_squares)
-    for sq in solved_squares:
+    known = 0
+    unknown = 0
+    for i, sq in enumerate(solved_squares):
         orig_val = sq.value
         orig_solution = solution.values()
         alt_solution = None
@@ -506,18 +510,38 @@ def generate_puzzle(solution):
             if v == orig_val:
                 continue
             sq.value = v
+            solve_attempts = 0
             try:
                 alt_solution = solve(solution, respect_limits=False)
                 break
             except InvalidBoardException:
                 pass
-        solution.set_values(orig_solution)
+            except KeyboardInterrupt:
+                solution.set_values(orig_solution)
+                solved = len(list(solution.solved_squares()))
+                unsolved = len(list(solution.unsolved_squares()))
+                log.exception(
+                    f"Interrupted with {known} set / {unknown} unset / "
+                    f"{solved} solved / {unsolved} unsolved / "
+                    f"{N_2 * N_2 - i - 1} to go")
+                solution.print()
+                return solution
+
         if alt_solution:
-            sq.value = orig_val
+            solution.set_values(orig_solution)
             log.info(f"{sq} must remain as is")
+            known += 1
         else:
             sq.value = None
             log.info(f"{sq} can only be {orig_val}")
+            solution.print()
+            unknown += 1
+        solved = len(list(solution.solved_squares()))
+        unsolved = len(list(solution.unsolved_squares()))
+        log.exception(
+            f"Generating with {known} set / {unknown} unset "
+            f"{solved} solved / {unsolved} unsolved / "
+            f"{N_2 * N_2 - i - 1} to go")
     return solution
 
 
